@@ -1,0 +1,11 @@
+# Normalize line endings. Shell scripts MUST stay LF, or they break on
+# WSL/Linux with `bad interpreter: /bin/sh^M`.
+* text=auto eol=lf
+*.sh text eol=lf
+
+# Binary assets: never diff or normalize these.
+*.png binary
+*.gif binary
+
+# Keep the lockfile out of diffs and language stats.
+bun.lock -diff linguist-generated
