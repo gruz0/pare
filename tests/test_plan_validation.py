@@ -239,3 +239,18 @@ def test_llm_command_problems(tmp_path):
     slow = script(tmp_path, "slow.sh", "sleep 5\n")
     with pytest.raises(PareError, match="did not answer within"):
         planning.ask_llm(slow, "hi", timeout=0.3, cwd=tmp_path)
+
+
+def test_clip_labels_are_kept_shortened_and_optional():
+    raw = json.loads(json.dumps(GOOD))
+    raw["clips"][0]["label"] = "  The fix\nthat worked "
+    raw["clips"][1]["label"] = "A label that goes on for far too long to fit a badge"
+    raw["clips"][2]["label"] = 7
+    plan, problems = check(raw)
+    assert problems == []
+    assert plan.clips[0].label == "The fix that worked"
+    assert len(plan.clips[1].label) <= planning.MAX_LABEL_CHARS
+    assert plan.clips[1].label.endswith("…")
+    assert plan.clips[2].label == ""
+    saved = json.loads(planning.to_json(plan, DURATION))
+    assert saved["clips"][0]["label"] == "The fix that worked"

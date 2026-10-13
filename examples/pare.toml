@@ -27,6 +27,12 @@ caption_max_chars = 42
 clips = 3
 title_text = "In this video"         # translate for other languages
 title_duration = 3.0
+teaser_label = "Coming up"           # badge on each highlight clip; "" for none
+splash_text = "Let's get started"    # card between the last clip and the video
+# no_splash = true
+# splash_image = "~/Pictures/banner.png"   # an image instead of the splash text
+# outro_image = "~/Pictures/banner.png"    # an image after the video
+# outro_duration = 5.0
 # llm_cmd = "claude -p --model sonnet"   # any command: prompt on stdin, answer on stdout
 # no_teaser = true
 

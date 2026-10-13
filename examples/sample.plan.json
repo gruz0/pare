@@ -8,16 +8,19 @@
     {
       "start": 7.6,
       "end": 11.0,
+      "label": "Pare finds those pauses and",
       "why": "picked near 7 s"
     },
     {
       "start": 22.533,
       "end": 25.933,
+      "label": "Then they are burned in",
       "why": "picked near 22 s"
     },
     {
       "start": 37.467,
       "end": 40.867,
+      "label": "Not happy with a choice",
       "why": "picked near 37 s"
     }
   ],

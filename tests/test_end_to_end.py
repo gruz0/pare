@@ -90,10 +90,11 @@ def test_teaser_and_main_lengths(full, long_recording):
     plan = json.loads((full / "lesson.plan.json").read_text())
     card = int(stream(work / "card.mov", "video")["nb_frames"])
     main = int(stream(work / "main.mov", "video")["nb_frames"])
-    assert card == 90  # 3 s at 30 fps
+    splash = int(stream(work / "splash.mov", "video")["nb_frames"])
+    assert (card, splash) == (90, 45)  # 3 s and 1.5 s at 30 fps
     clips = sorted(work.glob("clip*.mov"))
     assert len(clips) == len(plan["clips"]) == 3
-    total = card + main
+    total = card + splash + main
     for clip, spec in zip(clips, plan["clips"], strict=True):
         frames = int(stream(clip, "video")["nb_frames"])
         assert frames == round(spec["end"] * 30) - round(spec["start"] * 30)
@@ -119,7 +120,8 @@ def test_chapters_follow_youtube_rules(full):
     # The first real chapter starts where the teaser ends.
     work = full / "lesson.pare-work"
     teaser = sum(
-        int(stream(p, "video")["nb_frames"]) for p in [work / "card.mov", *work.glob("clip*.mov")]
+        int(stream(p, "video")["nb_frames"])
+        for p in [work / "card.mov", work / "splash.mov", *work.glob("clip*.mov")]
     )
     assert starts[1] == teaser // 30
 
@@ -241,6 +243,8 @@ def test_keep_work_reuses_the_main_encode(long_recording, full, tmp_path, capsys
         ["--no-teaser", *LLM],
         ["--no-loudnorm", *LLM],
         ["--no-fades", "--teaser-order", "clips-first", *LLM],
+        ["--no-splash", "--teaser-label", "", *LLM],
+        ["--splash-text", "100% 'go': now", "--teaser-label", "Up next: 50%", *LLM],
         ["--no-ai", "--no-cuts"],
         ["--no-ai", "--no-captions"],
         ["--no-cuts", "--no-captions", "--no-teaser", *LLM],
@@ -325,7 +329,7 @@ def test_special_characters_in_paths_and_topics(recording, tmp_path):
     final = folder / f"{stem}.final.mp4"
     assert decode_errors(final) == ""
     work = folder / f"{stem}.pare-work"
-    assert (work / "topics.txt").read_text(encoding="utf-8").splitlines() == [
+    assert (work / "card-topics.txt").read_text(encoding="utf-8").splitlines() == [
         f"•  {topic}" for topic in topics
     ]
     # Each topic line is really drawn on the card: its row has bright (text) pixels.
@@ -576,3 +580,48 @@ def test_three_minute_1080p_recording(tmp_path):
     assert chapters[0] == "00:00 Highlights" and len(chapters) >= 4
     assert integrated_loudness(final, start=25) == pytest.approx(-14.0, abs=1.0)
     assert seconds(final) < 160
+
+
+def test_image_splash_and_outro(recording, tmp_path, capsys):
+    video, subs = recording
+
+    def still(name: str, size: str) -> Path:
+        path = tmp_path / name
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", f"color=c=white:s={size}",
+             "-frames:v", "1", str(path)],
+            check=True,
+        )  # fmt: skip
+        return path
+
+    wide, square = still("it's 100% wide.png", "1280x716"), still("square.png", "200x200")
+    out = tmp_path / "out"
+    code = run_pare(
+        video, subs, *LLM, "-o", out, "--keep-work", "--splash-image", wide,
+        "--outro-image", square, "--outro-duration", "2", *FAST,
+    )  # fmt: skip
+    assert code == 0
+    final = out / "talk.final.mp4"
+    assert decode_errors(final) == ""
+    work = out / "talk.pare-work"
+    frames = {p.stem: int(stream(p, "video")["nb_frames"]) for p in work.glob("*.mov")}
+    assert (frames["splash"], frames["outro"]) == (45, 60)
+    assert int(stream(final, "video")["nb_frames"]) == sum(frames.values())
+    # The wide image fills the frame; the square one sits between dark bars.
+    splash = gray_frame(work / "splash.mov", 0.75)
+    assert min(splash) > 200
+    outro = gray_frame(work / "outro.mov", 1.0)
+    row = outro[90 * 320 : 91 * 320]
+    assert max(row[:50]) < 60 and min(row[100:220]) > 200 and max(row[270:]) < 60
+    # Every clip's badge names its place in the teaser and its label from the plan.
+    plan = json.loads((out / "talk.plan.json").read_text())
+    for i, clip in enumerate(plan["clips"], 1):
+        text = (work / f"clip{i:02}-badge.txt").read_text(encoding="utf-8")
+        assert text == f"Coming up {i}/{len(plan['clips'])} · {clip['label']}"
+
+    # A bad image is reported before anything is encoded.
+    for flag, path in (("--splash-image", tmp_path / "missing.png"), ("--outro-image", subs)):
+        capsys.readouterr()
+        assert run_pare(video, subs, *LLM, "-o", tmp_path / "bad", flag, path, *FAST) == 1
+        assert flag in capsys.readouterr().err
+        assert not (tmp_path / "bad").exists()

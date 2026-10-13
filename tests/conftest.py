@@ -20,6 +20,14 @@ needs_ffmpeg = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def no_user_config(tmp_path_factory: pytest.TempPathFactory):
+    """Hide the developer's own ``~/.config/pare/config.toml`` from every run."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("config")))
+        yield
+
+
 @pytest.fixture(autouse=True)
 def no_real_llm(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> None:
     """Shadow ``claude`` on PATH so no test can reach the real CLI or the network."""

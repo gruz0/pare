@@ -43,7 +43,7 @@ All of that is mechanical work. Pare does it with FFmpeg and an LLM that reads t
 2. **Fixes the loudness.** Two-pass normalisation to −14 LUFS, the level YouTube plays at.
 3. **Re-times and burns in your captions.** Long lines are split into readable chunks, placed clear of a bottom-right webcam.
 4. **Plans a teaser and chapters.** The LLM reads the re-timed subtitles and picks topics, a few punchy clips and chapter titles. Pare checks and repairs the answer in code, then saves it as a plain JSON file you can edit.
-5. **Assembles the result.** An "In this video" card, the highlight clips, then the full video, plus a YouTube-ready chapter list.
+5. **Assembles the result.** An "In this video" card, the highlight clips (each marked "Coming up"), a short splash that shows where the video starts, then the full video, plus a YouTube-ready chapter list.
 
 Every step can be switched off or tuned. See [how it works](docs/how-it-works.md) for the details.
 
@@ -52,6 +52,8 @@ Every step can be switched off or tuned. See [how it works](docs/how-it-works.md
 | ![Title card with topics](docs/demo/title-card.png) | ![Captions burned into the video](docs/demo/captions.png) |
 
 _(Demo images are generated from a synthetic test pattern, not real footage.)_
+
+**A real one:** [this video](https://youtu.be/jtqAZDCS3sA) was cut, captioned and given its teaser, splash and outro by Pare.
 
 ## Install
 
@@ -142,6 +144,10 @@ Any other Whisper SRT works just as well; Parley is supported, not required.
 | `--clips N`                        | Number of highlight clips                                      | 3                                 |
 | `--no-teaser`                      | No card or clips (chapters still written)                      | off                               |
 | `--title-text TEXT`                | Card heading, e.g. in another language                         | "In this video"                   |
+| `--teaser-label TEXT`              | Badge on each highlight clip (`""` for none)                   | "Coming up"                       |
+| `--splash-text TEXT`               | Card between the last clip and the video (`--no-splash`: none) | "Let's get started"               |
+| `--splash-image FILE`              | Use an image, e.g. your channel banner, as that card           | -                                 |
+| `--outro-image FILE`               | End the video with an image (`--outro-duration`, 5 s)          | -                                 |
 | `--llm-cmd CMD`                    | Any command that reads a prompt on stdin and prints the answer | `claude -p`                       |
 | `--crf N` / `--preset NAME`        | x264 quality and speed                                         | 18 / `medium`                     |
 | `--embed-chapters`                 | Also store chapters inside the MP4                             | off                               |
@@ -158,12 +164,12 @@ Pare never forces the AI's choices on you. `recording.plan.json` is plain JSON, 
 ```json
 {
   "topics": ["Setting up the OBS scene", "Cutting pauses automatically", "Burning in captions"],
-  "clips": [{ "start": 12.3, "end": 17.8, "why": "states the payoff" }],
+  "clips": [{ "start": 12.3, "end": 17.8, "label": "The payoff", "why": "states the payoff" }],
   "chapters": [{ "start": 0, "title": "Why raw recordings feel slow" }]
 }
 ```
 
-Change a topic, swap a clip, rename a chapter, then render again:
+Change a topic, swap a clip, reword a clip's `label` (shown on its badge), rename a chapter, then render again:
 
 ```bash
 pare recording.mkv subs.srt --plan recording.plan.json --keep-work

@@ -4,6 +4,20 @@ All notable changes to Pare are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Highlight clips carry a "Coming up" badge (`--teaser-label`), and a short splash card
+  (`--splash-text`, `--splash-duration`, `--no-splash`) separates the last clip from the video.
+- The plan has a `label` per clip, shown on its badge with a counter: "Coming up 2/3 · The fix".
+- `--splash-image FILE` uses an image as the splash, and `--outro-image FILE`
+  (`--outro-duration`) ends the video with one.
+
+### Changed
+
+- Clip fades are longer (1 s, was 0.2 s) and adjustable with `--clip-fade`.
+
 ## [0.1.0] - 2026-10-13
 
 First release.

@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from pare import audio, captions, chapters, ffmpeg, loudness, render, silence, srt
@@ -279,6 +279,20 @@ def render_main(
     return piece
 
 
+def badge_text(label: str, index: int, count: int, title: str) -> str:
+    """What a clip's badge says: ``Coming up 2/3 · The fix``.
+
+    The counter is left out for a single clip and the title when the plan has
+    none. An empty ``label`` means no badge at all.
+    """
+    label = label.strip()
+    if not label:
+        return ""
+    if count > 1:
+        label = f"{label} {index}/{count}"
+    return f"{label} · {title.strip()}" if title.strip() else label
+
+
 def run(options: Options, reporter: Reporter) -> None:
     """Run the whole pipeline for one recording."""
     started = time.monotonic()
@@ -328,6 +342,12 @@ def run(options: Options, reporter: Reporter) -> None:
         print_cut_list(timeline)
         reporter.info("Dry run: nothing was written.")
         return
+
+    # Look at the card images now: a wrong path should not cost a full encode.
+    splash_image = options.splash_image.expanduser() if options.splash_image else None
+    outro_image = options.outro_image.expanduser() if options.outro_image else None
+    splash_dims = render.image_size(splash_image, "--splash-image") if splash_image else None
+    outro_dims = render.image_size(outro_image, "--outro-image") if outro_image else None
 
     out.final.parent.mkdir(parents=True, exist_ok=True)
     out.work.mkdir(parents=True, exist_ok=True)
@@ -380,32 +400,41 @@ def run(options: Options, reporter: Reporter) -> None:
     teaser: list[render.Piece] = []
     if plan is not None and not options.no_teaser:
         reporter.info("Building the teaser...")
+        size = (info.width, info.height)
+        card_style = render.CardStyle(
+            heading=options.title_text,
+            seconds=options.title_duration,
+            font=find_font(options.title_font),
+            color=render.check_color(options.title_color, "--title-color"),
+            background=render.check_color(options.title_bg, "--title-bg"),
+            accent=render.check_color(options.title_accent, "--title-accent"),
+            fades=not options.no_fades,
+        )
         card: render.Piece | None = None
         if plan.topics:
-            card_style = render.CardStyle(
-                heading=options.title_text,
-                seconds=options.title_duration,
-                font=find_font(options.title_font),
-                color=render.check_color(options.title_color, "--title-color"),
-                background=render.check_color(options.title_bg, "--title-bg"),
-                accent=render.check_color(options.title_accent, "--title-accent"),
-                fades=not options.no_fades,
-            )
             card = render.make_title_card(
-                out.work,
-                plan.topics,
-                style=card_style,
-                size=(info.width, info.height),
-                fps=fps,
-                encoding=encoding,
+                out.work, plan.topics, style=card_style, size=size, fps=fps, encoding=encoding
             )
+        badges: list[render.Badge | None] = [
+            render.Badge(
+                text=text,
+                font=card_style.font,
+                color=card_style.color,
+                background=card_style.background,
+                accent=card_style.accent,
+            )
+            if (text := badge_text(options.teaser_label, i, len(plan.clips), clip.label))
+            else None
+            for i, clip in enumerate(plan.clips, 1)
+        ]
         clip_pieces = [
             piece
-            for i, clip in enumerate(plan.clips, 1)
+            for i, (clip, badge) in enumerate(zip(plan.clips, badges, strict=True), 1)
             if (
                 piece := render.make_clip(
-                    out.work, i, clip.start, clip.end,
-                    main=main, fps=fps, fades=not options.no_fades, encoding=encoding,
+                    out.work, i, clip.start, clip.end, main=main, size=size, fps=fps,
+                    fade=0.0 if options.no_fades else options.clip_fade, badge=badge,
+                    encoding=encoding,
                 )
             )
         ]  # fmt: skip
@@ -413,10 +442,39 @@ def run(options: Options, reporter: Reporter) -> None:
         teaser = (
             clip_pieces + cards if options.teaser_order == "clips-first" else cards + clip_pieces
         )
+        # A splash marks where the video proper begins. A title card in that
+        # position already does, so it is only added after a clip.
+        if clip_pieces and teaser[-1] is clip_pieces[-1] and not options.no_splash:
+            if splash_image and splash_dims:
+                splash = render.make_image_card(
+                    out.work, splash_image, splash_dims, name="splash",
+                    seconds=options.splash_duration, size=size, fps=fps,
+                    fades=not options.no_fades, background=card_style.background,
+                    encoding=encoding,
+                )  # fmt: skip
+            else:
+                splash_style = replace(
+                    card_style, heading=options.splash_text, seconds=options.splash_duration
+                )
+                splash = render.make_title_card(
+                    out.work, [], style=splash_style, size=size, fps=fps, encoding=encoding,
+                    name="splash",
+                )  # fmt: skip
+            teaser.append(splash)
 
     pieces = [*teaser, main]
+    if outro_image and outro_dims:
+        pieces.append(
+            render.make_image_card(
+                out.work, outro_image, outro_dims, name="outro",
+                seconds=options.outro_duration, size=(info.width, info.height), fps=fps,
+                fades=not options.no_fades,
+                background=render.check_color(options.title_bg, "--title-bg"),
+                encoding=encoding,
+            )
+        )  # fmt: skip
     teaser_seconds = sum(p.seconds(fps) for p in teaser)
-    total_seconds = teaser_seconds + main.seconds(fps)
+    total_seconds = sum(p.seconds(fps) for p in pieces)
     chapter_list: list[chapters.Chapter] = []
     if plan is not None:
         chapter_list = chapters.final_chapters(
