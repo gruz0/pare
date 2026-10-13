@@ -1,0 +1,43 @@
+{
+  "topics": [
+    "Raw screen recordings feel slow",
+    "Next it brings the loudness up to",
+    "Those become a short teaser that"
+  ],
+  "clips": [
+    {
+      "start": 7.6,
+      "end": 11.0,
+      "why": "picked near 7 s"
+    },
+    {
+      "start": 22.533,
+      "end": 25.933,
+      "why": "picked near 22 s"
+    },
+    {
+      "start": 37.467,
+      "end": 40.867,
+      "why": "picked near 37 s"
+    }
+  ],
+  "chapters": [
+    {
+      "start": 0.0,
+      "title": "Raw screen recordings feel slow, and the"
+    },
+    {
+      "start": 11.333,
+      "title": "Audio and video stay in sync, even after"
+    },
+    {
+      "start": 22.533,
+      "title": "Then they are burned in, clear of the"
+    },
+    {
+      "start": 33.733,
+      "title": "It also drafts chapter titles you can"
+    }
+  ],
+  "duration": 44.8
+}

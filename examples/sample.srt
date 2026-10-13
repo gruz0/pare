@@ -1,0 +1,47 @@
+1
+00:00:01,000 --> 00:00:04,400
+Raw screen recordings feel slow, and the reason is dead air.
+
+2
+00:00:06,000 --> 00:00:09,400
+Every pause, every moment of thinking, makes the viewer drift away.
+
+3
+00:00:11,000 --> 00:00:14,400
+Pare finds those pauses and cuts them out on exact frame boundaries.
+
+4
+00:00:16,000 --> 00:00:19,400
+Audio and video stay in sync, even after hundreds of jump cuts.
+
+5
+00:00:21,000 --> 00:00:24,400
+Next it brings the loudness up to the level YouTube expects.
+
+6
+00:00:26,000 --> 00:00:29,400
+Your subtitles are re-timed, so they still match the edited video.
+
+7
+00:00:31,000 --> 00:00:34,400
+Then they are burned in, clear of the webcam in the corner.
+
+8
+00:00:36,000 --> 00:00:39,400
+An assistant reads the transcript and picks a few punchy highlights.
+
+9
+00:00:41,000 --> 00:00:44,400
+Those become a short teaser that opens the video.
+
+10
+00:00:46,000 --> 00:00:49,400
+It also drafts chapter titles you can paste into the description.
+
+11
+00:00:51,000 --> 00:00:54,400
+Not happy with a choice? Edit the plan file and render again.
+
+12
+00:00:56,000 --> 00:00:59,400
+One command, from a raw recording to something worth watching.

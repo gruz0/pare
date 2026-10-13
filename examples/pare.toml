@@ -1,0 +1,37 @@
+# Example Pare configuration.
+#
+# Pare reads ./pare.toml (the folder you run it from) or, if that does not
+# exist, ~/.config/pare/config.toml. Use --config FILE to point at another one.
+# Keys are the command-line option names with underscores; flags given on the
+# command line always win. Everything here is optional: delete what you do not
+# need. The values below are examples, not the defaults.
+
+# --- pause removal ---------------------------------------------------------
+# silence_db = -40      # by default: -35, lowered automatically for quiet recordings
+min_silence = 0.6       # only cut pauses at least this long (seconds)
+pad = 0.2               # breathing room kept on each side of speech (seconds)
+# cut_by = "subs"       # noisy room or background music: use transcript gaps
+
+# --- audio -------------------------------------------------------------------
+audio_track = 1         # OBS multi-track: 1 is usually the full mix
+# mix_tracks = true     # or mix every track together
+lufs = -14.0            # target loudness
+
+# --- captions ----------------------------------------------------------------
+caption_position = "bottom-center"   # or "bottom-left", "top"
+caption_max_chars = 42
+# caption_font = "DejaVu Sans"
+# caption_size = 48                  # pixels; default scales with the frame height
+
+# --- AI plan and teaser ------------------------------------------------------
+clips = 3
+title_text = "In this video"         # translate for other languages
+title_duration = 3.0
+# llm_cmd = "claude -p --model sonnet"   # any command: prompt on stdin, answer on stdout
+# no_teaser = true
+
+# --- output ------------------------------------------------------------------
+crf = 18
+preset = "medium"       # "slow" for smaller files, "veryfast" for quick drafts
+# output_dir = "~/Videos/polished"
+# embed_chapters = true
