@@ -7,7 +7,7 @@ import json
 import os
 import shutil
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from pare import audio, captions, chapters, ffmpeg, loudness, render, silence, srt
@@ -380,32 +380,38 @@ def run(options: Options, reporter: Reporter) -> None:
     teaser: list[render.Piece] = []
     if plan is not None and not options.no_teaser:
         reporter.info("Building the teaser...")
+        size = (info.width, info.height)
+        card_style = render.CardStyle(
+            heading=options.title_text,
+            seconds=options.title_duration,
+            font=find_font(options.title_font),
+            color=render.check_color(options.title_color, "--title-color"),
+            background=render.check_color(options.title_bg, "--title-bg"),
+            accent=render.check_color(options.title_accent, "--title-accent"),
+            fades=not options.no_fades,
+        )
         card: render.Piece | None = None
         if plan.topics:
-            card_style = render.CardStyle(
-                heading=options.title_text,
-                seconds=options.title_duration,
-                font=find_font(options.title_font),
-                color=render.check_color(options.title_color, "--title-color"),
-                background=render.check_color(options.title_bg, "--title-bg"),
-                accent=render.check_color(options.title_accent, "--title-accent"),
-                fades=not options.no_fades,
-            )
             card = render.make_title_card(
-                out.work,
-                plan.topics,
-                style=card_style,
-                size=(info.width, info.height),
-                fps=fps,
-                encoding=encoding,
+                out.work, plan.topics, style=card_style, size=size, fps=fps, encoding=encoding
+            )
+        badge: render.Badge | None = None
+        if options.teaser_label.strip():
+            badge = render.Badge(
+                text=options.teaser_label.strip(),
+                font=card_style.font,
+                color=card_style.color,
+                background=card_style.background,
+                accent=card_style.accent,
             )
         clip_pieces = [
             piece
             for i, clip in enumerate(plan.clips, 1)
             if (
                 piece := render.make_clip(
-                    out.work, i, clip.start, clip.end,
-                    main=main, fps=fps, fades=not options.no_fades, encoding=encoding,
+                    out.work, i, clip.start, clip.end, main=main, size=size, fps=fps,
+                    fade=0.0 if options.no_fades else options.clip_fade, badge=badge,
+                    encoding=encoding,
                 )
             )
         ]  # fmt: skip
@@ -413,6 +419,18 @@ def run(options: Options, reporter: Reporter) -> None:
         teaser = (
             clip_pieces + cards if options.teaser_order == "clips-first" else cards + clip_pieces
         )
+        # A splash marks where the video proper begins. A title card in that
+        # position already does, so it is only added after a clip.
+        if clip_pieces and teaser[-1] is clip_pieces[-1] and not options.no_splash:
+            splash_style = replace(
+                card_style, heading=options.splash_text, seconds=options.splash_duration
+            )
+            teaser.append(
+                render.make_title_card(
+                    out.work, [], style=splash_style, size=size, fps=fps, encoding=encoding,
+                    name="splash",
+                )
+            )  # fmt: skip
 
     pieces = [*teaser, main]
     teaser_seconds = sum(p.seconds(fps) for p in teaser)

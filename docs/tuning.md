@@ -51,7 +51,10 @@ Whisper's cue times are approximate: cues often start a little early, end late, 
 - **Different clips or titles**: edit `<name>.plan.json` and re-run with `--plan <name>.plan.json --keep-work`. Times are seconds on the edited video; `<name>.cut.srt` shows what is said when.
 - **More or fewer clips**: `--clips 4`, or `--clips 0` for the card only.
 - **Clips first, then the card**: `--teaser-order clips-first`.
-- **Another language**: `--title-text "Neste vídeo"`, `--teaser-chapter "Destaques"`. Topics and chapter titles follow the language of the subtitles.
+- **Another language**: `--title-text "Neste vídeo"`, `--teaser-label "A seguir"`, `--splash-text "Vamos começar"`, `--teaser-chapter "Destaques"`. Topics and chapter titles follow the language of the subtitles.
+- **No "Coming up" badge on the clips**: `--teaser-label ""`.
+- **No splash before the video**: `--no-splash`; a longer or shorter one: `--splash-duration 2`.
+- **Clips switch too fast or too slowly**: `--clip-fade 0.5` (default 1 s, at most a quarter of each clip). Hard cuts: `--no-fades`.
 - **Colours and font**: `--title-bg "#0b132b" --title-color white --title-accent "#ffd166" --title-font "Noto Sans"` (or a `.ttf` path).
 - **No teaser, chapters only**: `--no-teaser`.
 - **A different model**: `--llm-cmd "claude -p --model sonnet"`, or any command that reads the prompt on stdin and prints the answer.

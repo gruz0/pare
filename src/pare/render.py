@@ -27,8 +27,7 @@ _COLOR_RE = re.compile(r"^(#|0x)?[0-9A-Za-z]{3,20}(@[0-9.]+)?$")
 _PCM_AUDIO = ["-c:a", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", "2"]
 # Keep muxer output free of version strings so identical inputs give identical files.
 _BITEXACT = ["-map_metadata", "-1", "-fflags", "+bitexact"]
-# Fades on teaser pieces, in seconds.
-VIDEO_FADE = 0.2
+# Audio fade on clip edges, in seconds.
 AUDIO_FADE = 0.03
 
 
@@ -75,6 +74,17 @@ class CardStyle:
     background: str
     accent: str
     fades: bool
+
+
+@dataclass(frozen=True)
+class Badge:
+    """The small label drawn on every highlight clip, e.g. "Coming up"."""
+
+    text: str
+    font: Path
+    color: str
+    background: str
+    accent: str
 
 
 def check_color(value: str, option: str) -> str:
@@ -154,6 +164,42 @@ def encode_main(
     return Piece("main.mov", frames)
 
 
+def install_font(work: Path, font: Path) -> str:
+    """Copy the font into the work directory and return its fixed name there."""
+    name = f"font{font.suffix.lower()}"
+    shutil.copyfile(font, work / name)
+    return name
+
+
+def badge_filters(work: Path, badge: Badge, width: int, height: int) -> list[str]:
+    """Filters that draw the badge in the top-left corner of a clip.
+
+    The box is drawn to a size computed here rather than by ``drawtext``, so
+    the accent strip beside it can match its height.
+    """
+    size = round(height * 0.034)
+    limit = width * 0.5
+    text_w = text_width(badge.font, badge.text, size)
+    if text_w > limit:
+        size = max(10, int(size * limit / text_w))
+        text_w = text_width(badge.font, badge.text, size)
+    pad = round(size * 0.6)
+    margin = round(height * 0.04)
+    strip = max(2, round(size * 0.2))
+    box_w = strip + round(text_w) + 2 * pad
+    box_h = round(size * 1.17) + pad
+    font_name = install_font(work, badge.font)
+    (work / "badge.txt").write_text(badge.text, encoding="utf-8")
+    background = badge.background if "@" in badge.background else f"{badge.background}@0.85"
+    return [
+        f"drawbox=x={margin}:y={margin}:w={box_w}:h={box_h}:color={background}:t=fill",
+        f"drawbox=x={margin}:y={margin}:w={strip}:h={box_h}:color={badge.accent}:t=fill",
+        f"drawtext=fontfile={font_name}:expansion=none:fontcolor={badge.color}"
+        f":textfile=badge.txt:fontsize={size}"
+        f":x={margin + strip + pad}:y={margin}+({box_h}-text_h)/2",
+    ]
+
+
 def card_layout(
     style: CardStyle, topics: list[str], width: int, height: int
 ) -> tuple[list[str], dict[str, int]]:
@@ -175,7 +221,7 @@ def card_layout(
     spacing = round(topic_size * 0.55)
     gap = round(height * 0.075)
     topics_height = len(lines) * round(topic_size * 1.17) + max(0, len(lines) - 1) * spacing
-    block = round(heading_size * 1.17) + (gap + topics_height if lines else 0)
+    block = round(heading_size * 1.17) + (gap + topics_height if lines else gap // 2)
     top = max(0, (height - block) // 2)
     return lines, {
         "heading_size": heading_size,
@@ -195,32 +241,34 @@ def make_title_card(
     size: tuple[int, int],
     fps: Fraction,
     encoding: Encoding,
+    name: str = "card",
 ) -> Piece:
-    """Render the "In this video" card with silent audio.
+    """Render a card with silent audio: a heading, an accent rule and the topics.
 
-    Text is read from files with ``expansion=none``, so topics containing
-    ``%``, ``:``, quotes or backslashes are drawn exactly as written.
+    This is the "In this video" card and, with no topics and another ``name``,
+    the splash shown before the main video. Text is read from files with
+    ``expansion=none``, so topics containing ``%``, ``:``, quotes or
+    backslashes are drawn exactly as written.
     """
     width, height = even(size[0]), even(size[1])
     frames = max(1, round(style.seconds * fps))
     lines, m = card_layout(style, topics, width, height)
-    font_name = f"font{style.font.suffix.lower()}"
-    shutil.copyfile(style.font, work / font_name)
-    (work / "heading.txt").write_text(style.heading, encoding="utf-8")
-    (work / "topics.txt").write_text("\n".join(lines), encoding="utf-8")
+    font_name = install_font(work, style.font)
+    (work / f"{name}-heading.txt").write_text(style.heading, encoding="utf-8")
+    (work / f"{name}-topics.txt").write_text("\n".join(lines), encoding="utf-8")
     text = f"fontfile={font_name}:expansion=none:fontcolor={style.color}"
     rule_w = round(width * 0.06)
     chain = [
-        f"drawtext={text}:textfile=heading.txt:fontsize={m['heading_size']}"
+        f"drawtext={text}:textfile={name}-heading.txt:fontsize={m['heading_size']}"
         f":x=(w-text_w)/2:y={m['heading_y']}",
+        f"drawbox=x=(iw-{rule_w})/2:y={m['rule_y']}:w={rule_w}:h={max(2, height // 270)}"
+        f":color={style.accent}:t=fill",
     ]
     if lines:
-        chain += [
-            f"drawbox=x=(iw-{rule_w})/2:y={m['rule_y']}:w={rule_w}:h={max(2, height // 270)}"
-            f":color={style.accent}:t=fill",
-            f"drawtext={text}:textfile=topics.txt:fontsize={m['topic_size']}"
-            f":line_spacing={m['spacing']}:x=(w-text_w)/2:y={m['topics_y']}",
-        ]
+        chain.append(
+            f"drawtext={text}:textfile={name}-topics.txt:fontsize={m['topic_size']}"
+            f":line_spacing={m['spacing']}:x=(w-text_w)/2:y={m['topics_y']}"
+        )
     seconds = float(frames / fps)
     fade = min(0.3, seconds / 4)
     if style.fades:
@@ -230,20 +278,20 @@ def make_title_card(
         ]
     chain += [f"trim=end_frame={frames}", "format=yuv420p"]
     graph = f"[0:v]{','.join(chain)}[v];\n[1:a]atrim=end_sample={samples_for(frames, fps)}[a]\n"
-    (work / "card.graph").write_text(graph, encoding="utf-8")
+    (work / f"{name}.graph").write_text(graph, encoding="utf-8")
     ffmpeg.run(
         [
             "ffmpeg", *ffmpeg.QUIET, "-y",
             "-f", "lavfi", "-i", f"color=c={style.background}:s={width}x{height}:r={fps}",
             "-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo",
-            *ffmpeg.filter_script_args("card.graph"), "-map", "[v]", "-map", "[a]",
+            *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
             *encoding.video_args(fps), *_PCM_AUDIO, *_BITEXACT,
-            "card.mov",
+            f"{name}.mov",
         ],
-        what="rendering the title card",
+        what=f"rendering the {name}",
         cwd=work,
     )  # fmt: skip
-    return Piece("card.mov", frames)
+    return Piece(f"{name}.mov", frames)
 
 
 def make_clip(
@@ -253,16 +301,20 @@ def make_clip(
     end: float,
     *,
     main: Piece,
+    size: tuple[int, int],
     fps: Fraction,
-    fades: bool,
+    fade: float,
+    badge: Badge | None,
     encoding: Encoding,
 ) -> Piece | None:
     """Cut one highlight out of the finished main video.
 
     Cutting from the polished main piece means captions and loudness carry
     over. The clip starts and ends on frame boundaries and its audio is
-    trimmed to the matching samples. Returns ``None`` for a clip that falls
-    outside the video.
+    trimmed to the matching samples. ``fade`` is the length of the video fade
+    in and out, 0 for none. ``badge`` labels it as a preview, so it
+    is not mistaken for the start of the video. Returns ``None`` for a clip
+    that falls outside the video.
     """
     first = min(max(round(start * fps), 0), main.frames)
     last = min(max(round(end * fps), 0), main.frames)
@@ -277,8 +329,11 @@ def make_clip(
         f":end={float((last - Fraction(1, 2)) / fps):.6f}",
         "setpts=N/FRAME_RATE/TB",
     ]
-    fade = min(VIDEO_FADE, seconds / 4)
-    if fades:
+    if badge:
+        video += badge_filters(work, badge, even(size[0]), even(size[1]))
+    # Never more than a quarter of the clip per side, so half of it is fully visible.
+    fade = min(fade, seconds / 4)
+    if fade > 0:
         video += [
             f"fade=t=in:st=0:d={fade:.3f}",
             f"fade=t=out:st={seconds - fade:.3f}:d={fade:.3f}",

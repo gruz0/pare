@@ -90,10 +90,11 @@ def test_teaser_and_main_lengths(full, long_recording):
     plan = json.loads((full / "lesson.plan.json").read_text())
     card = int(stream(work / "card.mov", "video")["nb_frames"])
     main = int(stream(work / "main.mov", "video")["nb_frames"])
-    assert card == 90  # 3 s at 30 fps
+    splash = int(stream(work / "splash.mov", "video")["nb_frames"])
+    assert (card, splash) == (90, 45)  # 3 s and 1.5 s at 30 fps
     clips = sorted(work.glob("clip*.mov"))
     assert len(clips) == len(plan["clips"]) == 3
-    total = card + main
+    total = card + splash + main
     for clip, spec in zip(clips, plan["clips"], strict=True):
         frames = int(stream(clip, "video")["nb_frames"])
         assert frames == round(spec["end"] * 30) - round(spec["start"] * 30)
@@ -119,7 +120,8 @@ def test_chapters_follow_youtube_rules(full):
     # The first real chapter starts where the teaser ends.
     work = full / "lesson.pare-work"
     teaser = sum(
-        int(stream(p, "video")["nb_frames"]) for p in [work / "card.mov", *work.glob("clip*.mov")]
+        int(stream(p, "video")["nb_frames"])
+        for p in [work / "card.mov", work / "splash.mov", *work.glob("clip*.mov")]
     )
     assert starts[1] == teaser // 30
 
@@ -241,6 +243,8 @@ def test_keep_work_reuses_the_main_encode(long_recording, full, tmp_path, capsys
         ["--no-teaser", *LLM],
         ["--no-loudnorm", *LLM],
         ["--no-fades", "--teaser-order", "clips-first", *LLM],
+        ["--no-splash", "--teaser-label", "", *LLM],
+        ["--splash-text", "100% 'go': now", "--teaser-label", "Up next: 50%", *LLM],
         ["--no-ai", "--no-cuts"],
         ["--no-ai", "--no-captions"],
         ["--no-cuts", "--no-captions", "--no-teaser", *LLM],
@@ -325,7 +329,7 @@ def test_special_characters_in_paths_and_topics(recording, tmp_path):
     final = folder / f"{stem}.final.mp4"
     assert decode_errors(final) == ""
     work = folder / f"{stem}.pare-work"
-    assert (work / "topics.txt").read_text(encoding="utf-8").splitlines() == [
+    assert (work / "card-topics.txt").read_text(encoding="utf-8").splitlines() == [
         f"•  {topic}" for topic in topics
     ]
     # Each topic line is really drawn on the card: its row has bright (text) pixels.

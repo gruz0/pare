@@ -81,6 +81,11 @@ class Options:
     title_bg: str = "#101820"
     title_accent: str = "#F2AA4C"
     no_fades: bool = False
+    clip_fade: float = 1.0
+    teaser_label: str = "Coming up"
+    no_splash: bool = False
+    splash_text: str = "Let's get started"
+    splash_duration: float = 1.5
     teaser_chapter: str = "Highlights"
 
     # output
@@ -283,7 +288,24 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument(
         "--title-accent", metavar="COLOR", help=f"accent line (default: {d.title_accent})"
     )
-    flag(g, "--no-fades", "no fade in/out on the card and clips")
+    flag(g, "--no-fades", "no fade in/out on the cards and clips")
+    g.add_argument(
+        "--clip-fade", type=float, metavar="SEC",
+        help="fade in/out on each clip, at most a quarter of the clip "
+        f"(default: {d.clip_fade:g})",
+    )  # fmt: skip
+    g.add_argument(
+        "--teaser-label", metavar="TEXT",
+        help=f'badge drawn on each clip, "" for none (default: "{d.teaser_label}")',
+    )  # fmt: skip
+    flag(g, "--no-splash", "no splash card between the last clip and the video")
+    g.add_argument(
+        "--splash-text", metavar="TEXT", help=f'splash heading (default: "{d.splash_text}")'
+    )
+    g.add_argument(
+        "--splash-duration", type=float, metavar="SEC",
+        help=f"how long the splash shows (default: {d.splash_duration:g})",
+    )  # fmt: skip
     g.add_argument(
         "--teaser-chapter", metavar="TITLE",
         help=f'chapter title for the teaser (default: "{d.teaser_chapter}")',
@@ -399,6 +421,10 @@ def _validate(o: Options) -> None:
         (o.clips is None or 0 <= o.clips <= 10, "--clips must be between 0 and 10"),
         (0 <= o.crf <= 51, "--crf must be between 0 and 51"),
         (0.5 <= o.title_duration <= 30, "--title-duration must be between 0.5 and 30"),
+        (0 <= o.clip_fade <= 5, "--clip-fade must be between 0 and 5"),
+        (0.5 <= o.splash_duration <= 10, "--splash-duration must be between 0.5 and 10"),
+        (bool(o.splash_text.strip()) or o.no_splash, "--splash-text cannot be empty; use "
+         "--no-splash to leave the splash out"),
         (o.caption_max_chars >= 10, "--caption-max-chars must be at least 10"),
         (1 <= o.caption_max_lines <= 4, "--caption-max-lines must be between 1 and 4"),
         (o.caption_size >= 0 and o.caption_margin >= 0 and o.caption_outline >= 0,
