@@ -215,3 +215,12 @@ def test_word_starts_only_when_words_match_the_text():
              transcript.Word(2.0, 2.9, "world")]  # fmt: skip
     cues = [Cue(1.0, 3.0, "Hello big world"), Cue(4.0, 5.0, "No words here")]
     assert transcript.word_starts_by_cue(cues, words) == {0: [1.0, 1.5, 2.0]}
+
+
+def test_badge_text():
+    from pare.pipeline import badge_text
+
+    assert badge_text("Coming up", 2, 3, "The fix") == "Coming up 2/3 · The fix"
+    assert badge_text("Coming up", 1, 1, "The fix") == "Coming up · The fix"
+    assert badge_text("Coming up", 2, 3, "") == "Coming up 2/3"
+    assert badge_text(" ", 2, 3, "The fix") == ""

@@ -86,6 +86,9 @@ class Options:
     no_splash: bool = False
     splash_text: str = "Let's get started"
     splash_duration: float = 1.5
+    splash_image: Path | None = None
+    outro_image: Path | None = None
+    outro_duration: float = 5.0
     teaser_chapter: str = "Highlights"
 
     # output
@@ -268,7 +271,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"give up on the LLM after this long (default: {d.llm_timeout:g})",
     )  # fmt: skip
 
-    g = parser.add_argument_group("teaser (title card + highlight clips)")
+    g = parser.add_argument_group("teaser (title card + highlight clips) and outro")
     flag(g, "--no-teaser", "no title card or clips (chapters are still written)")
     g.add_argument(
         "--teaser-order", choices=("card-first", "clips-first"),
@@ -305,6 +308,18 @@ def build_parser() -> argparse.ArgumentParser:
     g.add_argument(
         "--splash-duration", type=float, metavar="SEC",
         help=f"how long the splash shows (default: {d.splash_duration:g})",
+    )  # fmt: skip
+    g.add_argument(
+        "--splash-image", type=Path, metavar="FILE",
+        help="show this image (PNG or JPEG) as the splash instead of the text",
+    )  # fmt: skip
+    g.add_argument(
+        "--outro-image", type=Path, metavar="FILE",
+        help="end the video with this image, e.g. a channel banner (default: no outro)",
+    )  # fmt: skip
+    g.add_argument(
+        "--outro-duration", type=float, metavar="SEC",
+        help=f"how long the outro image shows (default: {d.outro_duration:g})",
     )  # fmt: skip
     g.add_argument(
         "--teaser-chapter", metavar="TITLE",
@@ -422,6 +437,7 @@ def _validate(o: Options) -> None:
         (0 <= o.crf <= 51, "--crf must be between 0 and 51"),
         (0.5 <= o.title_duration <= 30, "--title-duration must be between 0.5 and 30"),
         (0 <= o.clip_fade <= 5, "--clip-fade must be between 0 and 5"),
+        (0.5 <= o.outro_duration <= 30, "--outro-duration must be between 0.5 and 30"),
         (0.5 <= o.splash_duration <= 10, "--splash-duration must be between 0.5 and 10"),
         (bool(o.splash_text.strip()) or o.no_splash, "--splash-text cannot be empty; use "
          "--no-splash to leave the splash out"),

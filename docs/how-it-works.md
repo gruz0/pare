@@ -81,11 +81,11 @@ The one full re-encode. A single FFmpeg run converts the video to constant frame
 
 ## 10. Teaser
 
-The title card is drawn with `drawtext` from text files, so topics containing `%`, `:`, quotes or backslashes appear exactly as written; the font size shrinks if a line would not fit. Highlight clips are cut from the finished main encode, so they already have captions and the right loudness. Each clip fades in and out and carries a small "Coming up" badge in the top-left corner, so nobody takes it for the start of the video. After the last clip a short splash card ("Let's get started") marks where the video proper begins; when the title card is in that position (`--teaser-order clips-first`) it does that job and no splash is added.
+The title card is drawn with `drawtext` from text files, so topics containing `%`, `:`, quotes or backslashes appear exactly as written; the font size shrinks if a line would not fit. Highlight clips are cut from the finished main encode, so they already have captions and the right loudness. Each clip fades in and out and carries a small badge in the top-left corner ("Coming up 2/3 · The fix": its place in the teaser and the label the plan gives it), so nobody takes it for the start of the video. After the last clip a short splash card ("Let's get started") marks where the video proper begins; when the title card is in that position (`--teaser-order clips-first`) it does that job and no splash is added. The splash can be an image instead (`--splash-image`), and `--outro-image` adds one after the video.
 
 ## 11. Join
 
-Card, clips, splash and main video are joined with FFmpeg's concat demuxer. Video is copied without re-encoding; audio is encoded to AAC once, across the whole programme, so there are no gaps or clicks at the joins. The result is written to a temporary file and renamed into place only when it is complete.
+Card, clips, splash, main video and outro are joined with FFmpeg's concat demuxer. Video is copied without re-encoding; audio is encoded to AAC once, across the whole programme, so there are no gaps or clicks at the joins. The result is written to a temporary file and renamed into place only when it is complete.
 
 ## 12. Chapters
 

@@ -171,14 +171,16 @@ def install_font(work: Path, font: Path) -> str:
     return name
 
 
-def badge_filters(work: Path, badge: Badge, width: int, height: int) -> list[str]:
+def badge_filters(
+    work: Path, badge: Badge, width: int, height: int, text_name: str = "badge.txt"
+) -> list[str]:
     """Filters that draw the badge in the top-left corner of a clip.
 
     The box is drawn to a size computed here rather than by ``drawtext``, so
     the accent strip beside it can match its height.
     """
     size = round(height * 0.034)
-    limit = width * 0.5
+    limit = width * 0.7
     text_w = text_width(badge.font, badge.text, size)
     if text_w > limit:
         size = max(10, int(size * limit / text_w))
@@ -189,13 +191,13 @@ def badge_filters(work: Path, badge: Badge, width: int, height: int) -> list[str
     box_w = strip + round(text_w) + 2 * pad
     box_h = round(size * 1.17) + pad
     font_name = install_font(work, badge.font)
-    (work / "badge.txt").write_text(badge.text, encoding="utf-8")
+    (work / text_name).write_text(badge.text, encoding="utf-8")
     background = badge.background if "@" in badge.background else f"{badge.background}@0.85"
     return [
         f"drawbox=x={margin}:y={margin}:w={box_w}:h={box_h}:color={background}:t=fill",
         f"drawbox=x={margin}:y={margin}:w={strip}:h={box_h}:color={badge.accent}:t=fill",
         f"drawtext=fontfile={font_name}:expansion=none:fontcolor={badge.color}"
-        f":textfile=badge.txt:fontsize={size}"
+        f":textfile={text_name}:fontsize={size}"
         f":x={margin + strip + pad}:y={margin}+({box_h}-text_h)/2",
     ]
 
@@ -294,6 +296,87 @@ def make_title_card(
     return Piece(f"{name}.mov", frames)
 
 
+def image_size(path: Path, option: str) -> tuple[int, int]:
+    """Width and height of a still image, or a :class:`PareError` naming ``option``."""
+    if not path.is_file():
+        raise PareError(f"{option}: no such file: {path}")
+    try:
+        out = ffmpeg.run(
+            [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=width,height", "-of", "csv=p=0:s=x", str(path),
+            ],
+            what="reading the image",
+        ).stdout  # fmt: skip
+        width, height = (int(n) for n in out.strip().splitlines()[0].split("x")[:2])
+    except (PareError, ValueError, IndexError) as exc:
+        raise PareError(
+            f"{option}: {path} is not an image FFmpeg can read. Use a PNG or JPEG."
+        ) from exc
+    return width, height
+
+
+def make_image_card(
+    work: Path,
+    image: Path,
+    image_dims: tuple[int, int],
+    *,
+    name: str,
+    seconds: float,
+    size: tuple[int, int],
+    fps: Fraction,
+    fades: bool,
+    background: str,
+    encoding: Encoding,
+) -> Piece:
+    """Render a still image as a full-frame card with silent audio.
+
+    An image of about the frame's shape is scaled to fill it, losing a sliver
+    at the edges; any other shape is fitted inside and padded with
+    ``background``. The image path is an input argument, never part of the
+    filter graph.
+    """
+    width, height = even(size[0]), even(size[1])
+    frames = max(1, round(seconds * fps))
+    # HD video is taken to be BT.709 by players; the scaler's default is BT.601.
+    matrix = ":out_color_matrix=bt709" if height >= 720 else ""
+    same_shape = abs((image_dims[0] / image_dims[1]) / (width / height) - 1) <= 0.03
+    if same_shape:
+        chain = [
+            f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos{matrix}",
+            f"crop={width}:{height}",
+        ]
+    else:
+        chain = [
+            f"scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos{matrix}",
+            f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:color={background}",
+        ]
+    chain.append("setsar=1")
+    length = float(frames / fps)
+    fade = min(0.3, length / 4)
+    if fades:
+        chain += [
+            f"fade=t=in:st=0:d={fade:.3f}",
+            f"fade=t=out:st={length - fade:.3f}:d={fade:.3f}",
+        ]
+    chain += [f"trim=end_frame={frames}", "format=yuv420p"]
+    graph = f"[0:v]{','.join(chain)}[v];\n[1:a]atrim=end_sample={samples_for(frames, fps)}[a]\n"
+    (work / f"{name}.graph").write_text(graph, encoding="utf-8")
+    ffmpeg.run(
+        [
+            "ffmpeg", *ffmpeg.QUIET, "-y",
+            "-loop", "1", "-framerate", str(fps), "-i", str(image.resolve()),
+            "-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo",
+            *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
+            *encoding.video_args(fps), *_PCM_AUDIO, *_BITEXACT,
+            f"{name}.mov",
+        ],
+        what=f"rendering the {name} image",
+        cwd=work,
+    )  # fmt: skip
+    return Piece(f"{name}.mov", frames)
+
+
 def make_clip(
     work: Path,
     index: int,
@@ -329,8 +412,9 @@ def make_clip(
         f":end={float((last - Fraction(1, 2)) / fps):.6f}",
         "setpts=N/FRAME_RATE/TB",
     ]
+    name = f"clip{index:02}"
     if badge:
-        video += badge_filters(work, badge, even(size[0]), even(size[1]))
+        video += badge_filters(work, badge, even(size[0]), even(size[1]), f"{name}-badge.txt")
     # Never more than a quarter of the clip per side, so half of it is fully visible.
     fade = min(fade, seconds / 4)
     if fade > 0:
@@ -348,7 +432,6 @@ def make_clip(
         f"afade=t=in:st=0:d={AUDIO_FADE}",
         f"afade=t=out:st={seconds - AUDIO_FADE:.4f}:d={AUDIO_FADE}",
     ]
-    name = f"clip{index:02}"
     (work / f"{name}.graph").write_text(
         f"[0:v:0]{','.join(video)}[v];\n[0:a:0]{','.join(audio)}[a]\n", encoding="utf-8"
     )

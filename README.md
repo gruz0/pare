@@ -144,6 +144,8 @@ Any other Whisper SRT works just as well; Parley is supported, not required.
 | `--title-text TEXT`                | Card heading, e.g. in another language                         | "In this video"                   |
 | `--teaser-label TEXT`              | Badge on each highlight clip (`""` for none)                   | "Coming up"                       |
 | `--splash-text TEXT`               | Card between the last clip and the video (`--no-splash`: none) | "Let's get started"               |
+| `--splash-image FILE`              | Use an image, e.g. your channel banner, as that card           | -                                 |
+| `--outro-image FILE`               | End the video with an image (`--outro-duration`, 5 s)          | -                                 |
 | `--llm-cmd CMD`                    | Any command that reads a prompt on stdin and prints the answer | `claude -p`                       |
 | `--crf N` / `--preset NAME`        | x264 quality and speed                                         | 18 / `medium`                     |
 | `--embed-chapters`                 | Also store chapters inside the MP4                             | off                               |
@@ -160,12 +162,12 @@ Pare never forces the AI's choices on you. `recording.plan.json` is plain JSON, 
 ```json
 {
   "topics": ["Setting up the OBS scene", "Cutting pauses automatically", "Burning in captions"],
-  "clips": [{ "start": 12.3, "end": 17.8, "why": "states the payoff" }],
+  "clips": [{ "start": 12.3, "end": 17.8, "label": "The payoff", "why": "states the payoff" }],
   "chapters": [{ "start": 0, "title": "Why raw recordings feel slow" }]
 }
 ```
 
-Change a topic, swap a clip, rename a chapter, then render again:
+Change a topic, swap a clip, reword a clip's `label` (shown on its badge), rename a chapter, then render again:
 
 ```bash
 pare recording.mkv subs.srt --plan recording.plan.json --keep-work

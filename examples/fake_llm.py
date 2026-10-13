@@ -50,7 +50,14 @@ def main() -> None:
             i += 1
             end = cues[i][1]
         if not clips or start >= float(clips[-1]["end"]):  # type: ignore[arg-type]
-            clips.append({"start": start, "end": end, "why": f"picked near {target:.0f} s"})
+            clips.append(
+                {
+                    "start": start,
+                    "end": end,
+                    "label": title(cues[i][2], 28),
+                    "why": f"picked near {target:.0f} s",
+                }
+            )
 
     # Chapters: about five, at least 10 seconds apart, starting on captions.
     step = max(10.0, duration / 5)

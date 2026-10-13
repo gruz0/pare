@@ -10,6 +10,9 @@ All notable changes to Pare are recorded here. The format follows
 
 - Highlight clips carry a "Coming up" badge (`--teaser-label`), and a short splash card
   (`--splash-text`, `--splash-duration`, `--no-splash`) separates the last clip from the video.
+- The plan has a `label` per clip, shown on its badge with a counter: "Coming up 2/3 · The fix".
+- `--splash-image FILE` uses an image as the splash, and `--outro-image FILE`
+  (`--outro-duration`) ends the video with one.
 
 ### Changed
 
