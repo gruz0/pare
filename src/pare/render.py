@@ -39,11 +39,16 @@ class Encoding:
     crf: int
     preset: str
 
-    def video_args(self) -> list[str]:
-        """libx264 arguments; identical for all pieces so they concatenate cleanly."""
+    def video_args(self, fps: Fraction) -> list[str]:
+        """libx264 arguments; identical for all pieces so they concatenate cleanly.
+
+        The output rate is stated explicitly. FFmpeg 7 no longer carries a
+        frame rate across the ``select`` filter and would otherwise fall back
+        to 25 fps, dropping or repeating frames.
+        """
         return [
             "-c:v", "libx264", "-crf", str(self.crf), "-preset", self.preset,
-            "-pix_fmt", "yuv420p", "-fps_mode", "cfr",
+            "-pix_fmt", "yuv420p", "-r", str(fps), "-fps_mode", "cfr",
         ]  # fmt: skip
 
 
@@ -113,17 +118,17 @@ def encode_main(
     """
     frames = timeline.kept_frames
     width, height = size
-    chain = [f"fps={timeline.fps}:start_time=0"]
+    # Order matters. Padding comes straight after the frame-rate conversion,
+    # while the rate is still known to the filter graph (FFmpeg 7 forgets it
+    # after select/setpts, and tpad needs it); the trim at the end counts
+    # frames, so it needs no rate. Pad then trim makes the video exactly
+    # `frames` long even if the source ends a frame or two early. Lengths are
+    # set by filters, not -frames:v, because stopping the output on the video
+    # would cut the audio short.
+    chain = [f"fps={timeline.fps}:start_time=0", "tpad=stop_mode=clone:stop_duration=2"]
     if timeline.cuts:
         chain.append(f"select='{timeline.select_expr()}'")
-    # Pad then trim: the video is exactly `frames` long even if the source ends
-    # a frame or two early. Lengths are set by filters, not -frames:v, because
-    # stopping the output on the video would cut the audio short.
-    chain += [
-        "setpts=N/FRAME_RATE/TB",
-        "tpad=stop_mode=clone:stop_duration=2",
-        f"trim=end_frame={frames}",
-    ]
+    chain += ["setpts=N/FRAME_RATE/TB", f"trim=end_frame={frames}"]
     if (even(width), even(height)) != (width, height):
         chain.append(f"crop={even(width)}:{even(height)}:0:0")
     chain.append("format=yuv420p")
@@ -137,7 +142,7 @@ def encode_main(
         [
             "ffmpeg", *ffmpeg.QUIET, "-y", "-i", str(src), *RAW_INPUT, "-i", pcm_name,
             *ffmpeg.filter_script_args("main.graph"), "-map", "[v]", "-map", "[a]",
-            *encoding.video_args(), *_PCM_AUDIO, *_BITEXACT,
+            *encoding.video_args(timeline.fps), *_PCM_AUDIO, *_BITEXACT,
             "main.mov",
         ],
         what="encoding the main video",
@@ -232,7 +237,7 @@ def make_title_card(
             "-f", "lavfi", "-i", f"color=c={style.background}:s={width}x{height}:r={fps}",
             "-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo",
             *ffmpeg.filter_script_args("card.graph"), "-map", "[v]", "-map", "[a]",
-            *encoding.video_args(), *_PCM_AUDIO, *_BITEXACT,
+            *encoding.video_args(fps), *_PCM_AUDIO, *_BITEXACT,
             "card.mov",
         ],
         what="rendering the title card",
@@ -296,7 +301,7 @@ def make_clip(
         [
             "ffmpeg", *ffmpeg.QUIET, "-y", "-ss", f"{seek:.3f}", "-copyts", "-i", main.name,
             *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
-            *encoding.video_args(), *_PCM_AUDIO, *_BITEXACT,
+            *encoding.video_args(fps), *_PCM_AUDIO, *_BITEXACT,
             f"{name}.mov",
         ],
         what=f"cutting highlight clip {index}",
