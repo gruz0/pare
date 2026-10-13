@@ -1,0 +1,6 @@
+# Not ours / not markdown we want reformatted
+node_modules/
+.venv/
+*.pare-work/
+# Kept as written by its author
+PRD.md

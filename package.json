@@ -1,0 +1,21 @@
+{
+  "name": "pare",
+  "version": "0.1.0",
+  "private": true,
+  "description": "One-command polish for screen-recorded videos (markdown formatting only; Pare itself is Python)",
+  "homepage": "https://github.com/gruz0/pare#readme",
+  "bugs": "https://github.com/gruz0/pare/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gruz0/pare.git"
+  },
+  "license": "MIT",
+  "author": "gruz0 <kadyrov.dev@gmail.com>",
+  "scripts": {
+    "format": "prettier --write \"**/*.md\"",
+    "format:check": "prettier --check \"**/*.md\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.4"
+  }
+}
