@@ -169,7 +169,7 @@ Change a topic, swap a clip, rename a chapter, then render again:
 pare recording.mkv subs.srt --plan recording.plan.json --keep-work
 ```
 
-With `--plan` nothing is sent to an LLM and the same inputs give the same output. With `--keep-work` the slow main encode from the previous run is reused, so only the teaser is rebuilt and a re-render takes seconds. (Use `--keep-work` on the first run too, so there is something to reuse.) `recording.cut.srt` shows what is said when, which helps when picking times.
+With `--plan` nothing is sent to an LLM and the same inputs give the same output. With `--keep-work` the slow main encode from the previous run is reused, so only the teaser is rebuilt: on a 9-minute recording that is about 30 seconds instead of 5 minutes. (Use `--keep-work` on the first run too, so there is something to reuse.) `recording.cut.srt` shows what is said when, which helps when picking times.
 
 ## Privacy
 

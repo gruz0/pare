@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import synth
-from conftest import FAKE_LLM, needs_ffmpeg, run_pare
+from conftest import FAKE_LLM, ROOT, needs_ffmpeg, run_pare
 from helpers import (
     decode_errors,
     dominant_tone,
@@ -478,6 +478,14 @@ def test_parley_folder_end_to_end(recording, tmp_path):
         == 0
     )
     assert "[SPEAKER_00]:" in (kept / "talk.cut.srt").read_text()
+
+
+def test_relative_llm_command_runs_from_the_current_directory(recording, tmp_path, monkeypatch):
+    """`--llm-cmd examples/fake_llm.sh`, as the README writes it."""
+    video, subs = recording
+    monkeypatch.chdir(ROOT)
+    assert run_pare(video, subs, "--llm-cmd", "examples/fake_llm.sh", "-o", tmp_path, *FAST) == 0
+    assert (tmp_path / "talk.plan.json").is_file()
 
 
 def test_srt_next_to_the_video_is_found(recording, tmp_path):

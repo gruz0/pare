@@ -69,9 +69,14 @@ jobs:
         run: pytest
 
   # Debian 12 is the primary target: FFmpeg 5.1 and Python 3.11 from apt.
-  debian-12:
+  # Debian 13 covers FFmpeg 7, where the filter-script option changed.
+  debian:
     runs-on: ubuntu-latest
-    container: debian:12
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ["12", "13"]
+    container: debian:${{ matrix.release }}
     steps:
       - name: Install system packages
         run: |

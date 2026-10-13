@@ -370,7 +370,13 @@ def load_plan(
 
 
 def ask_llm(command: str, prompt: str, *, timeout: float, cwd: Path) -> str:
-    """Run the LLM command with the prompt on stdin and return what it printed."""
+    """Run the LLM command with the prompt on stdin and return what it printed.
+
+    The default ``claude -p`` runs in ``cwd`` (Pare's work directory), so it
+    does not pick up instructions from whatever project the user happens to be
+    in. A custom ``--llm-cmd`` runs in the user's own directory, so relative
+    paths in it mean what the user expects.
+    """
     try:
         argv = shlex.split(command)
     except ValueError as exc:
@@ -394,7 +400,7 @@ def ask_llm(command: str, prompt: str, *, timeout: float, cwd: Path) -> str:
         try:
             result = subprocess.run(
                 attempt, input=prompt, capture_output=True, text=True, errors="replace",
-                cwd=cwd, timeout=timeout, check=False,
+                cwd=cwd if is_default else None, timeout=timeout, check=False,
             )  # fmt: skip
         except subprocess.TimeoutExpired as exc:
             raise PareError(
