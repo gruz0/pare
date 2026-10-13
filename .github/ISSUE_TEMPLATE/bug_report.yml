@@ -1,0 +1,72 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Pare is tested on **Debian 12 (FFmpeg 5.1)** and **Ubuntu 24.04 (FFmpeg 6.1)**,
+        so the versions below really matter for reproducing your issue.
+
+        Please **don't attach private recordings or transcripts**. If the bug needs footage to reproduce,
+        try `examples/make_sample.sh` first, or describe the input (`ffprobe` output is ideal).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact command you ran, including all flags (and your pare.toml, if you use one).
+      placeholder: |
+        pare recording.mkv subs.srt --pad 0.2
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Debian 12
+        - Ubuntu
+        - WSL2 (say which distro below)
+        - Other Linux
+        - macOS
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Output of `pare --version`, `ffmpeg -version | head -1` and `python3 --version`.
+    validations:
+      required: true
+
+  - type: textarea
+    id: input
+    attributes:
+      label: About the input
+      description: |
+        Output of `ffprobe -hide_banner recording.mkv` (resolution, frame rate, audio tracks), and which
+        tool made the SRT.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Output
+      description: Everything Pare printed. Adding `--dry-run` shows the cut list. This is automatically formatted as code.
+      render: shell
+    validations:
+      required: false

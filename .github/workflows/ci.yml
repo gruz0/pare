@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ShellCheck (examples)
+        run: shellcheck examples/*.sh
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Prettier (markdown)
+        run: |
+          bun install --frozen-lockfile
+          bun run format:check
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Ruff (lint + format)
+        run: |
+          pip install ruff
+          ruff check .
+          ruff format --check .
+
+  # Ubuntu's FFmpeg (6.x on ubuntu-24.04) across the supported Python versions.
+  test:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install FFmpeg and fonts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Pare
+        run: pip install ".[dev]"
+
+      # No network, no real LLM: fixtures are generated with FFmpeg and the
+      # plan comes from examples/fake_llm.sh.
+      - name: Tests
+        run: pytest
+
+  # Debian 12 is the primary target: FFmpeg 5.1 and Python 3.11 from apt.
+  debian-12:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ffmpeg fonts-dejavu-core python3 python3-venv git ca-certificates
+
+      - uses: actions/checkout@v4
+
+      - name: Install Pare
+        run: |
+          python3 -m venv /opt/venv
+          /opt/venv/bin/pip install ".[dev]"
+
+      - name: Tests (including the 3-minute 1080p run)
+        env:
+          PARE_SLOW: "1"
+        run: /opt/venv/bin/pytest
+
+      - name: README quick start
+        run: |
+          export PATH="/opt/venv/bin:$PATH"
+          examples/make_sample.sh
+          pare sample.mkv examples/sample.srt --llm-cmd examples/fake_llm.sh
+          test -s sample.final.mp4 && test -s sample.chapters.txt
+          test -s sample.plan.json && test -s sample.cut.srt
