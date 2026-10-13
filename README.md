@@ -53,6 +53,8 @@ Every step can be switched off or tuned. See [how it works](docs/how-it-works.md
 
 _(Demo images are generated from a synthetic test pattern, not real footage.)_
 
+**A real one:** [this video](https://youtu.be/jtqAZDCS3sA) was cut, captioned and given its teaser, splash and outro by Pare.
+
 ## Install
 
 Pare needs **FFmpeg**, a font, and **Python 3.11 or newer**. On Debian 12 or Ubuntu:

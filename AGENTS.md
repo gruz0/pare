@@ -52,7 +52,8 @@ chapters. It is a Python command-line tool that drives `ffmpeg`/`ffprobe` and as
 - **Never commit real footage, transcripts or plans made from them.** Media files are git-ignored;
   keep it that way. Tests and demos use synthetic footage only.
 - **Keep committed docs, tests and examples anonymized:** generic paths like `~/Videos/recording.mkv`
-  and placeholder names. No real names, company names or personal file paths.
+  and placeholder names. No real names, company names or personal file paths. The one exception is the
+  link to the author's published example video in `README.md`.
 - **Tests must not need** real footage, a GPU, network access or the real `claude` CLI. Use
   `examples/fake_llm.sh` through `--llm-cmd`.
 - **Do not copy code from other projects** (auto-editor, jumpcutter, unsilence, …); describe and
