@@ -33,6 +33,8 @@ MAX_CHAPTERS = 8
 CLIP_TARGET = (3.0, 6.0)  # what the model is asked for
 CLIP_LIMITS = (2.0, 8.0)  # what is accepted after snapping to cue boundaries
 SNAP_SECONDS = 1.5
+OPENING_SECONDS = 20.0  # the teaser must not use this much of the video's start...
+OPENING_FRACTION = 0.10  # ...or this share of it, if that is less (short videos)
 MAX_TRANSCRIPT_CHARS = 120_000
 
 
@@ -81,6 +83,15 @@ def compact_transcript(cues: list[Cue], max_chars: int = MAX_TRANSCRIPT_CHARS) -
     return "\n".join(f"[{start:.1f}-{end:.1f}] {text}" for start, end, text in rows)
 
 
+def opening_window(duration: float) -> float:
+    """Seconds at the start of the edited video that teaser clips must stay out of.
+
+    The video plays right after the teaser, so a clip taken from its first
+    lines would be heard twice within seconds.
+    """
+    return round(min(OPENING_SECONDS, duration * OPENING_FRACTION), 1)
+
+
 def build_prompt(cues: list[Cue], duration: float, n_clips: int) -> str:
     """The instruction sent to the LLM, followed by the transcript."""
     transcript = compact_transcript(cues)
@@ -89,6 +100,7 @@ def build_prompt(cues: list[Cue], duration: float, n_clips: int) -> str:
             "The transcript is too long to send to the LLM in one request. Use --no-ai, "
             "or write a plan by hand and pass it with --plan."
         )
+    opening = opening_window(duration)
     max_chapters = max(MIN_CHAPTERS, min(MAX_CHAPTERS, int(duration // 30) or MIN_CHAPTERS))
     return f"""You are helping to publish a screen-recording video. Below are its subtitles, \
 one line per caption: [start-end] text, with times in seconds. The video is {duration:.1f} \
@@ -105,11 +117,12 @@ Rules:
 most {MAX_TOPIC_CHARS} characters. They are shown as bullets on an "In this video" card.
 - clips: exactly {n_clips} highlight clips for a teaser, each {CLIP_TARGET[0]:.0f} to \
 {CLIP_TARGET[1]:.0f} seconds long, from different parts of the video (not all from the start), \
-not overlapping. Each must start at the start time of a caption and end at the end time of a \
-caption, on sentence boundaries. Pick punchy, self-contained lines that make a viewer want to \
-keep watching. "label" is two to four words, at most {MAX_LABEL_CHARS} characters, naming what \
-the clip is about; it is shown on screen over the clip, after the words "Coming up". "why" is a \
-few words on why you picked it.
+not overlapping. No clip may start before {opening:g} seconds: the video itself begins right \
+after the teaser, so its opening lines would be heard twice. Each must start at the start time \
+of a caption and end at the end time of a caption, on sentence boundaries. Pick punchy, \
+self-contained lines that make a viewer want to keep watching. "label" is two to four words, at \
+most {MAX_LABEL_CHARS} characters, naming what the clip is about; it is shown on screen over the \
+clip, after the words "Coming up". "why" is a few words on why you picked it.
 - chapters: {MIN_CHAPTERS} to {max_chapters} chapters covering the whole video in order. The \
 first starts at 0. Each starts at least {MIN_CHAPTER_SECONDS:.0f} seconds after the previous \
 one and at least {MIN_CHAPTER_SECONDS:.0f} seconds before the end. Titles are at most \
@@ -198,6 +211,7 @@ def _clips(
     cues: list[Cue],
     n_clips: int | None,
     snap: bool,
+    opening: float,
 ) -> list[Clip]:
     if not isinstance(raw, list):
         problems.append('"clips" must be a list')
@@ -217,6 +231,12 @@ def _clips(
             end = _nearest(end, ends, SNAP_SECONDS)
         if end <= start:
             problems.append(f"clip {i} ends before it starts")
+            continue
+        if start < opening:
+            problems.append(
+                f"clip {i} starts at {start:.1f} s, in the opening of the video that plays "
+                f"right after the teaser; no clip may start before {opening:g} s"
+            )
             continue
         if not CLIP_LIMITS[0] <= end - start <= CLIP_LIMITS[1]:
             problems.append(
@@ -306,10 +326,12 @@ def validate(
 
     Returns the cleaned plan and a list of the rules the raw plan broke (empty
     when it was fine). Times are clamped to the video; with ``snap`` clip and
-    chapter times move to the nearest subtitle boundary; overlapping clips and
-    chapters closer than YouTube's 10 s minimum are dropped. ``strict`` adds
+    chapter times move to the nearest subtitle boundary; overlapping clips, clips
+    starting in the opening, and chapters closer than YouTube's 10 s minimum are
+    dropped. ``strict`` adds
     the rules that only make sense for a fresh LLM answer (how many topics and
-    chapters there should be); a plan the user edited may have fewer. Raises
+    chapters there should be, and that no clip starts in the video's opening);
+    a plan the user edited may have fewer, and may take any clip it likes. Raises
     :class:`PlanError` when the input is not a plan at all.
     """
     if not isinstance(raw, dict):
@@ -320,7 +342,13 @@ def validate(
             problems.append(f'"{key}" is missing')
     topics = _topics(raw.get("topics", []), problems, strict=strict)
     clips = _clips(
-        raw.get("clips", []), problems, duration=duration, cues=cues, n_clips=n_clips, snap=snap
+        raw.get("clips", []),
+        problems,
+        duration=duration,
+        cues=cues,
+        n_clips=n_clips,
+        snap=snap,
+        opening=opening_window(duration) if strict else 0.0,
     )
     chapters = _chapters(
         raw.get("chapters", []), problems, duration=duration, cues=cues, snap=snap, strict=strict

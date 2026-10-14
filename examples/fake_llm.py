@@ -39,12 +39,17 @@ def main() -> None:
     wanted = re.search(r"exactly (\d+) highlight clips", prompt)
     n_clips = int(wanted[1]) if wanted else 3
 
-    # Clips: for evenly spread positions, take a caption there and extend it
-    # over the following captions until it is at least 3 seconds long.
+    # The prompt names the opening of the video that clips must stay out of.
+    skipped = re.search(r"No clip may start before ([\d.]+) seconds", prompt)
+    opening = float(skipped[1]) if skipped else 0.0
+    usable = [j for j in range(len(cues)) if cues[j][0] >= opening] or list(range(len(cues)))
+
+    # Clips: for evenly spread positions after the opening, take a caption there
+    # and extend it over the following captions until it is at least 3 seconds long.
     clips: list[dict[str, object]] = []
     for k in range(n_clips):
-        target = duration * (k + 0.5) / n_clips
-        i = min(range(len(cues)), key=lambda j: abs(cues[j][0] - target))
+        target = opening + (duration - opening) * (k + 0.5) / n_clips
+        i = min(usable, key=lambda j: abs(cues[j][0] - target))
         start, end = cues[i][0], cues[i][1]
         while end - start < 3 and i + 1 < len(cues) and cues[i + 1][1] - start <= 6:
             i += 1

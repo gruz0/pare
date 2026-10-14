@@ -17,6 +17,9 @@ All notable changes to Pare are recorded here. The format follows
 ### Changed
 
 - Clip fades are longer (1 s, was 0.2 s) and adjustable with `--clip-fade`.
+- Teaser clips no longer start in the opening of the video (the first 20 s, or 10 % of a short
+  video), so its first lines are not heard twice. The prompt says so and validation enforces it. A
+  plan passed with `--plan` is not checked.
 
 ## [0.1.0] - 2026-10-13
 

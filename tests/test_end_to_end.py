@@ -202,6 +202,22 @@ def test_edited_plan_changes_the_result_without_calling_an_llm(
     assert capsys.readouterr().err == ""  # an edited plan is taken as written, no nagging
 
 
+def test_edited_plan_may_start_a_clip_in_the_opening(full, long_recording, tmp_path, capsys):
+    """The no-opening-lines rule is for the LLM's answer; a user's own clip is kept as written."""
+    video, subs = long_recording
+    plan = json.loads((full / "lesson.plan.json").read_text())
+    first = plan["clips"][0]
+    plan["clips"][0] = dict(first, start=0.0, end=first["end"] - first["start"])
+    edited = tmp_path / "edited.json"
+    edited.write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    code = run_pare(video, subs, "--plan", edited, "--llm-cmd", "false", "-o", out, *FAST)
+    assert code == 0
+    assert capsys.readouterr().err == ""
+    assert json.loads((out / "lesson.plan.json").read_text())["clips"][0]["start"] == 0.0
+    assert (out / "lesson.final.mp4").stat().st_size > 0
+
+
 def test_embedded_chapters(full, long_recording, tmp_path):
     video, subs = long_recording
     code = run_pare(
