@@ -14,7 +14,7 @@ DURATION = 120.0
 GOOD = {
     "topics": ["Cutting pauses", "Fixing loudness", "Burning captions"],
     "clips": [
-        {"start": 8.0, "end": 11.5, "why": "hook"},
+        {"start": 16.0, "end": 19.5, "why": "hook"},
         {"start": 60.0, "end": 63.5, "why": "payoff"},
         {"start": 100.0, "end": 103.5, "why": "close"},
     ],
@@ -36,7 +36,7 @@ def test_good_plan_passes_untouched():
     plan, problems = check(GOOD)
     assert problems == []
     assert plan.topics == GOOD["topics"]
-    assert [(c.start, c.end) for c in plan.clips] == [(8.0, 11.5), (60.0, 63.5), (100.0, 103.5)]
+    assert [(c.start, c.end) for c in plan.clips] == [(16.0, 19.5), (60.0, 63.5), (100.0, 103.5)]
     assert [c.start for c in plan.chapters] == [0.0, 40.0, 80.0]
 
 
@@ -48,39 +48,39 @@ def test_not_a_plan_is_fatal():
 
 
 def test_clips_snap_to_cue_boundaries():
-    raw = dict(GOOD, clips=[{"start": 8.6, "end": 10.9}, {"start": 59.2, "end": 64.4},
+    raw = dict(GOOD, clips=[{"start": 16.6, "end": 18.9}, {"start": 59.2, "end": 64.4},
                             {"start": 99.5, "end": 104.0}])  # fmt: skip
     plan, problems = check(raw)
     assert problems == []
-    assert [(c.start, c.end) for c in plan.clips] == [(8.0, 11.5), (60.0, 63.5), (100.0, 103.5)]
+    assert [(c.start, c.end) for c in plan.clips] == [(16.0, 19.5), (60.0, 63.5), (100.0, 103.5)]
 
 
 def test_without_snapping_times_are_kept_as_written():
-    raw = dict(GOOD, clips=[{"start": 8.6, "end": 12.9}])
+    raw = dict(GOOD, clips=[{"start": 16.6, "end": 20.9}])
     plan, _ = check(raw, snap=False, n_clips=None)
-    assert [(c.start, c.end) for c in plan.clips] == [(8.6, 12.9)]
+    assert [(c.start, c.end) for c in plan.clips] == [(16.6, 20.9)]
 
 
 def test_clips_are_clamped_fitted_and_deduplicated():
     raw = dict(
         GOOD,
         clips=[
-            {"start": 8.0, "end": 40.0},  # far too long: pulled back to a cue end
-            {"start": 9.0, "end": 11.0},  # overlaps the first: dropped
+            {"start": 16.0, "end": 48.0},  # far too long: pulled back to a cue end
+            {"start": 17.0, "end": 19.0},  # overlaps the first: dropped
             {"start": 116.0, "end": 500.0},  # past the end: clamped
             {"start": "soon", "end": 3},  # not numbers: dropped
             {"start": 50.0, "end": 49.0},  # backwards: dropped
         ],
     )
     plan, problems = check(raw)
-    assert [(c.start, c.end) for c in plan.clips] == [(8.0, 11.5), (116.0, 119.5)]
+    assert [(c.start, c.end) for c in plan.clips] == [(16.0, 19.5), (116.0, 119.5)]
     text = " ".join(problems)
     for expected in ("clip 1 is", "overlaps", "numeric", "ends before", "exactly 3"):
         assert expected in text
 
 
 def test_too_many_clips_are_trimmed():
-    clips = [{"start": float(i * 12), "end": float(i * 12 + 3.5)} for i in range(5)]
+    clips = [{"start": float(i * 12 + 24), "end": float(i * 12 + 27.5)} for i in range(5)]
     plan, problems = check(dict(GOOD, clips=clips))
     assert len(plan.clips) == 3 and any("exactly 3" in p for p in problems)
 
@@ -146,9 +146,62 @@ def test_compact_transcript_merges_when_too_long():
     assert "Sentence number 29." in squeezed and squeezed.startswith("[0.0-")
 
 
+def test_opening_window_is_20_seconds_or_a_tenth_of_a_short_video():
+    assert planning.opening_window(600.0) == 20.0
+    assert planning.opening_window(200.0) == 20.0
+    assert planning.opening_window(DURATION) == 12.0
+    assert planning.opening_window(45.7) == 4.6
+
+
+def test_clip_in_the_opening_is_a_problem_and_is_dropped():
+    early = [{"start": 4.0, "end": 7.5, "why": "the first sentence"}, *GOOD["clips"][1:]]
+    plan, problems = check(dict(GOOD, clips=early))
+    assert any("clip 1 starts at 4.0 s" in p and "before 12 s" in p for p in problems)
+    assert any("exactly 3" in p for p in problems)
+    assert [c.start for c in plan.clips] == [60.0, 100.0]
+
+
+def test_opening_is_measured_after_snapping_and_the_edge_is_allowed():
+    # 12.0 is the first caption start at or after the 12 s window on this transcript.
+    on_edge = [{"start": 12.0, "end": 15.5}, *GOOD["clips"][1:]]
+    assert check(dict(GOOD, clips=on_edge))[1] == []
+    # 9.0 snaps back to the caption starting at 8.0, which is inside the opening.
+    snapped_in = [{"start": 9.0, "end": 12.0}, *GOOD["clips"][1:]]
+    assert any("clip 1 starts at 8.0 s" in p for p in check(dict(GOOD, clips=snapped_in))[1])
+
+
+def test_opening_window_shrinks_for_short_videos():
+    clips = [{"start": 4.0, "end": 7.5}]
+    _, problems = validate(
+        dict(GOOD, clips=clips), duration=40.0, cues=CUES[:10], n_clips=1, snap=True
+    )
+    assert not any("opening" in p for p in problems)  # a 4 s window: 4.0 is allowed
+    _, problems = validate(
+        dict(GOOD, clips=[{"start": 0.0, "end": 3.5}]),
+        duration=40.0, cues=CUES[:10], n_clips=1, snap=True,
+    )  # fmt: skip
+    assert any("before 4 s" in p for p in problems)
+
+
+def test_hand_edited_plan_may_use_an_opening_clip(tmp_path, capsys):
+    early = {"start": 0.0, "end": 3.5, "label": "The first line", "why": "wanted"}
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(dict(GOOD, clips=[early]), indent=2), encoding="utf-8")
+    plan = planning.load_plan(
+        path, duration=DURATION, cues=CUES, max_clips=None, reporter=Reporter(quiet=True)
+    )
+    assert [(c.start, c.end) for c in plan.clips] == [(0.0, 3.5)]
+    assert "opening" not in capsys.readouterr().err
+    # The rule is for fresh answers only: non-strict validation takes it as written.
+    _, problems = check(dict(GOOD, clips=[early]), strict=False, n_clips=None)
+    assert problems == []
+
+
 def test_prompt_states_the_rules():
     prompt = planning.build_prompt(CUES, DURATION, 4)
     assert "exactly 4 highlight clips" in prompt
+    assert "No clip may start before 12 seconds" in prompt
+    assert "No clip may start before 20 seconds" in planning.build_prompt(CUES, 400.0, 4)
     assert "[0.0-3.5] Sentence number 0." in prompt
 
 
@@ -206,6 +259,27 @@ def test_llm_retry_feeds_errors_back(tmp_path):
     assert plan.topics == GOOD["topics"]
     prompts = log.read_text().split("=====")
     assert "there are 1 topics" in prompts[1]
+
+
+def test_llm_retry_complains_about_an_opening_clip(tmp_path):
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(GOOD))
+    early = tmp_path / "early.json"
+    first = dict(GOOD["clips"][0], start=0.0, end=3.5)
+    early.write_text(json.dumps(dict(GOOD, clips=[first, *GOOD["clips"][1:]])))
+    log = tmp_path / "prompts.log"
+    cmd = script(
+        tmp_path, "llm.sh",
+        f'prompt=$(cat)\nprintf "%s\\n=====\\n" "$prompt" >> {log}\n'
+        f'if echo "$prompt" | grep -q "previous reply was rejected"; then cat {good}; '
+        f"else cat {early}; fi\n",
+    )  # fmt: skip
+    plan = planning.make_plan(
+        cmd, CUES, duration=DURATION, n_clips=3, timeout=30, cwd=tmp_path,
+        reporter=Reporter(quiet=True),
+    )  # fmt: skip
+    assert [c.start for c in plan.clips] == [16.0, 60.0, 100.0]
+    assert "clip 1 starts at 0.0 s" in log.read_text().split("=====")[1]
 
 
 def test_llm_garbage_twice_fails_clearly(tmp_path):
