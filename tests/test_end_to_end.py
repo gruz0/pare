@@ -484,6 +484,31 @@ def test_parley_folder_end_to_end(recording, tmp_path):
     assert "[SPEAKER_00]:" in (kept / "talk.cut.srt").read_text()
 
 
+def test_parley_folder_with_a_doubled_track(recording, tmp_path, capsys):
+    """One mic on two tracks: Parley writes every cue twice, as [Me] and [Guest 1]."""
+    video, subs = recording
+    folder = tmp_path / "transcripts" / "talk"
+    folder.mkdir(parents=True)
+    cues = srt.read_srt(subs)
+    doubled = [
+        srt.Cue(c.start, c.end, f"[{who}]: {c.text}") for c in cues for who in ("Me", "Guest 1")
+    ]
+    (folder / "talk.srt").write_text(srt.format_srt(doubled))
+    out = tmp_path / "out"
+    assert run_pare(video, "--transcript", folder, *LLM, "-o", out, *FAST) == 0
+    assert f"dropped {len(cues)} subtitle(s)" in capsys.readouterr().err
+    single = srt.read_srt(out / "talk.cut.srt")
+    assert all(a.text != b.text for a, b in itertools.pairwise(single))
+    kept = tmp_path / "kept"
+    assert (
+        run_pare(video, "--transcript", folder, "--no-ai", "--keep-speakers", "-o", kept, *FAST)
+        == 0
+    )
+    labelled = srt.read_srt(kept / "talk.cut.srt")
+    assert len(labelled) == len(single)
+    assert all(c.text.startswith("[Me]:") for c in labelled)
+
+
 def test_relative_llm_command_runs_from_the_current_directory(recording, tmp_path, monkeypatch):
     """`--llm-cmd examples/fake_llm.sh`, as the README writes it."""
     video, subs = recording

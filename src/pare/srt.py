@@ -142,6 +142,34 @@ def strip_speakers(cues: list[Cue]) -> list[Cue]:
     return out
 
 
+def _unlabelled(text: str) -> str:
+    m = _BRACKET_LABEL_RE.match(text) or _GENERIC_LABEL_RE.match(text)
+    return flatten(text[m.end() :] if m else text)
+
+
+def drop_repeats(cues: list[Cue], tolerance: float = 0.05) -> tuple[list[Cue], int]:
+    """Drop a cue that repeats the previous one: same text, same times.
+
+    Happens when the same microphone was recorded on two tracks and each was
+    transcribed as a different speaker, so the text is compared without a
+    ``[Speaker]:`` label and the first cue (with its label) is kept. Times may
+    differ by up to ``tolerance`` seconds. Returns the kept cues and how many
+    were dropped.
+    """
+    out: list[Cue] = []
+    for cue in cues:
+        prev = out[-1] if out else None
+        if (
+            prev is not None
+            and _unlabelled(prev.text) == _unlabelled(cue.text)
+            and abs(prev.start - cue.start) <= tolerance
+            and abs(prev.end - cue.end) <= tolerance
+        ):
+            continue
+        out.append(cue)
+    return out, len(cues) - len(out)
+
+
 def remove_words(cues: list[Cue], words: set[str]) -> list[Cue]:
     """Delete whole-word occurrences of ``words`` (case-insensitive) from cue text."""
     if not words:

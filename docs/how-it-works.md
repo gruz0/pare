@@ -57,7 +57,7 @@ Everything after this point is derived from that one list, which is what keeps a
 
 ## 5. Re-time the subtitles
 
-Speaker labels are stripped (unless `--keep-speakers`). Cues longer than two lines of 42 characters are split into several, preferring to break at the end of a sentence, and each is wrapped into balanced lines. Then every cue is moved onto the edited timeline: cues inside removed sections disappear, cues that were partly cut are shortened. The result is written to `recording.cut.srt`.
+Speaker labels are stripped (unless `--keep-speakers`). A cue that repeats the one before it with the same text and times is dropped; Parley writes those when one microphone was recorded on two tracks. Cues longer than two lines of 42 characters are split into several, preferring to break at the end of a sentence, and each is wrapped into balanced lines. Then every cue is moved onto the edited timeline: cues inside removed sections disappear, cues that were partly cut are shortened. The result is written to `recording.cut.srt`.
 
 ## 6. Plan the teaser and chapters
 
