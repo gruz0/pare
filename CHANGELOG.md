@@ -17,6 +17,10 @@ All notable changes to Pare are recorded here. The format follows
   several files), finding each transcript by name. Finished recordings are skipped unless
   `--force`, a failure does not stop the rest, and a summary lists what was done, skipped and
   failed. `--dry-run` shows which transcript each recording would use.
+- `--encoder nvenc|vaapi|videotoolbox` encodes on the GPU. The encoder is checked before the run,
+  with a hint when it cannot be used, and the default quality follows the encoder (`--crf` 18 for
+  x264, 22 for GPU encoders, which looks about the same). On an RTX 3060 Ti a 1080p60 recording
+  took about a third less time.
 
 ### Changed
 

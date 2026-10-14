@@ -11,9 +11,10 @@ import sys
 import time
 import traceback
 from dataclasses import dataclass, replace
+from fractions import Fraction
 from pathlib import Path
 
-from pare import ffmpeg, pipeline
+from pare import encoders, ffmpeg, pipeline
 from pare.config import Options
 from pare.errors import PareError
 from pare.ui import Reporter, clock
@@ -187,6 +188,8 @@ def run(options: Options, reporter: Reporter) -> int:
 
     if todo:
         ffmpeg.require_tools()
+        # A GPU encoder that cannot open would fail every recording; say so once.
+        encoders.check(pipeline.encoding_for(options), (1280, 720), Fraction(30))
     results: dict[Path, tuple[str, str]] = {
         job.video: (job.status, job.detail) for job in jobs if job.status != TODO
     }

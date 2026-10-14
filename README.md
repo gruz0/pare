@@ -162,7 +162,8 @@ Each recording finds its transcript by name: a Parley folder `transcripts/<name>
 | `--splash-image FILE`              | Use an image, e.g. your channel banner, as that card           | -                                 |
 | `--outro-image FILE`               | End the video with an image (`--outro-duration`, 5 s)          | -                                 |
 | `--llm-cmd CMD`                    | Any command that reads a prompt on stdin and prints the answer | `claude -p`                       |
-| `--crf N` / `--preset NAME`        | x264 quality and speed                                         | 18 / `medium`                     |
+| `--crf N` / `--preset NAME`        | Quality and speed                                              | 18 (GPU: 22) / `medium`           |
+| `--encoder NAME`                   | `nvenc`, `vaapi` or `videotoolbox` to encode on the GPU        | `x264` (CPU)                      |
 | `--embed-chapters`                 | Also store chapters inside the MP4                             | off                               |
 | `--keep-work`                      | Keep intermediates and reuse the main encode next run          | off                               |
 
@@ -214,7 +215,7 @@ More in [docs/tuning.md](docs/tuning.md).
 
 **Can I use a different LLM?** Yes: `--llm-cmd "your-tool --flags"`. The command gets the prompt on stdin and must print the answer. Pare validates whatever comes back.
 
-**How long does it take?** The video is encoded once. On my desktop a 6-minute 1080p60 recording takes about 3 minutes, most of it x264. `--preset veryfast` is quicker for drafts.
+**How long does it take?** The video is encoded once. On my desktop a 6-minute 1080p60 recording takes about 3 minutes, most of it x264. With an NVIDIA card, `--encoder nvenc` brings that down by about a third; `vaapi` (Intel/AMD on Linux) and `videotoolbox` (macOS) are there too. `--preset veryfast` is quicker for drafts.
 
 **Will it work on a one-hour recording?** It is built to: cutting is tested with thousands of cuts, and nothing is held in memory. The longest recordings it has actually been run on so far are about ten minutes; see [docs/decisions.md](docs/decisions.md).
 

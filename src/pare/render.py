@@ -18,6 +18,7 @@ from pathlib import Path
 
 from pare import ffmpeg
 from pare.audio import RAW_INPUT, SAMPLE_RATE
+from pare.encoders import Encoding
 from pare.errors import PareError
 from pare.fonts import text_width
 from pare.timeline import Timeline
@@ -29,26 +30,6 @@ _PCM_AUDIO = ["-c:a", "pcm_s16le", "-ar", str(SAMPLE_RATE), "-ac", "2"]
 _BITEXACT = ["-map_metadata", "-1", "-fflags", "+bitexact"]
 # Audio fade on clip edges, in seconds.
 AUDIO_FADE = 0.03
-
-
-@dataclass(frozen=True)
-class Encoding:
-    """Video encoder settings shared by every piece."""
-
-    crf: int
-    preset: str
-
-    def video_args(self, fps: Fraction) -> list[str]:
-        """libx264 arguments; identical for all pieces so they concatenate cleanly.
-
-        The output rate is stated explicitly. FFmpeg 7 no longer carries a
-        frame rate across the ``select`` filter and would otherwise fall back
-        to 25 fps, dropping or repeating frames.
-        """
-        return [
-            "-c:v", "libx264", "-crf", str(self.crf), "-preset", self.preset,
-            "-pix_fmt", "yuv420p", "-r", str(fps), "-fps_mode", "cfr",
-        ]  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -144,13 +125,15 @@ def encode_main(
     chain.append("format=yuv420p")
     if captions_name:
         chain.append(f"subtitles={captions_name}")
+    chain += encoding.upload_filters()
     audio_chain = [audio_filter] if audio_filter else []
     audio_chain += ["apad", f"atrim=end_sample={samples_for(frames, timeline.fps)}"]
     graph = f"[0:v:0]{','.join(chain)}[v];\n[1:a:0]{','.join(audio_chain)}[a]\n"
     (work / "main.graph").write_text(graph, encoding="utf-8")
     ffmpeg.run_with_progress(
         [
-            "ffmpeg", *ffmpeg.QUIET, "-y", "-i", str(src), *RAW_INPUT, "-i", pcm_name,
+            "ffmpeg", *ffmpeg.QUIET, "-y", *encoding.device_args(),
+            "-i", str(src), *RAW_INPUT, "-i", pcm_name,
             *ffmpeg.filter_script_args("main.graph"), "-map", "[v]", "-map", "[a]",
             *encoding.video_args(timeline.fps), *_PCM_AUDIO, *_BITEXACT,
             "main.mov",
@@ -278,12 +261,12 @@ def make_title_card(
             f"fade=t=in:st=0:d={fade:.3f}",
             f"fade=t=out:st={seconds - fade:.3f}:d={fade:.3f}",
         ]
-    chain += [f"trim=end_frame={frames}", "format=yuv420p"]
+    chain += [f"trim=end_frame={frames}", "format=yuv420p", *encoding.upload_filters()]
     graph = f"[0:v]{','.join(chain)}[v];\n[1:a]atrim=end_sample={samples_for(frames, fps)}[a]\n"
     (work / f"{name}.graph").write_text(graph, encoding="utf-8")
     ffmpeg.run(
         [
-            "ffmpeg", *ffmpeg.QUIET, "-y",
+            "ffmpeg", *ffmpeg.QUIET, "-y", *encoding.device_args(),
             "-f", "lavfi", "-i", f"color=c={style.background}:s={width}x{height}:r={fps}",
             "-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo",
             *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
@@ -359,12 +342,12 @@ def make_image_card(
             f"fade=t=in:st=0:d={fade:.3f}",
             f"fade=t=out:st={length - fade:.3f}:d={fade:.3f}",
         ]
-    chain += [f"trim=end_frame={frames}", "format=yuv420p"]
+    chain += [f"trim=end_frame={frames}", "format=yuv420p", *encoding.upload_filters()]
     graph = f"[0:v]{','.join(chain)}[v];\n[1:a]atrim=end_sample={samples_for(frames, fps)}[a]\n"
     (work / f"{name}.graph").write_text(graph, encoding="utf-8")
     ffmpeg.run(
         [
-            "ffmpeg", *ffmpeg.QUIET, "-y",
+            "ffmpeg", *ffmpeg.QUIET, "-y", *encoding.device_args(),
             "-loop", "1", "-framerate", str(fps), "-i", str(image.resolve()),
             "-f", "lavfi", "-i", f"anullsrc=r={SAMPLE_RATE}:cl=stereo",
             *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
@@ -422,7 +405,7 @@ def make_clip(
             f"fade=t=in:st=0:d={fade:.3f}",
             f"fade=t=out:st={seconds - fade:.3f}:d={fade:.3f}",
         ]
-    video.append("format=yuv420p")
+    video += ["format=yuv420p", *encoding.upload_filters()]
     audio = [
         f"atrim=start={samples_for(first, fps) / SAMPLE_RATE:.6f}",
         "asetpts=N/SR/TB",
@@ -437,7 +420,8 @@ def make_clip(
     )
     ffmpeg.run(
         [
-            "ffmpeg", *ffmpeg.QUIET, "-y", "-ss", f"{seek:.3f}", "-copyts", "-i", main.name,
+            "ffmpeg", *ffmpeg.QUIET, "-y", *encoding.device_args(),
+            "-ss", f"{seek:.3f}", "-copyts", "-i", main.name,
             *ffmpeg.filter_script_args(f"{name}.graph"), "-map", "[v]", "-map", "[a]",
             *encoding.video_args(fps), *_PCM_AUDIO, *_BITEXACT,
             f"{name}.mov",

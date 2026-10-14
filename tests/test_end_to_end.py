@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 import synth
-from conftest import FAKE_LLM, ROOT, needs_ffmpeg, run_pare
+from conftest import ENCODER, FAKE_LLM, ROOT, needs_ffmpeg, run_pare
 from helpers import (
     decode_errors,
     dominant_tone,
@@ -29,7 +29,7 @@ from pare.errors import PareError
 
 pytestmark = needs_ffmpeg
 
-FAST = ["--preset", "ultrafast", "--crf", "30", "-q"]
+FAST = ["--encoder", ENCODER, "--preset", "ultrafast", "--crf", "30", "-q"]
 LLM = ["--llm-cmd", FAKE_LLM]
 
 
@@ -610,7 +610,7 @@ def test_three_minute_1080p_recording(tmp_path):
     video = tmp_path / "recording.mkv"
     speech = synth.make_recording(video, duration=180.0, size="1920x1080")
     synth.write_srt(tmp_path / "subs.srt", speech)
-    assert run_pare(video, tmp_path / "subs.srt", "--llm-cmd", FAKE_LLM) == 0
+    assert run_pare(video, tmp_path / "subs.srt", "--llm-cmd", FAKE_LLM, "--encoder", ENCODER) == 0
     final = tmp_path / "recording.final.mp4"
     for name in ("final.mp4", "chapters.txt", "plan.json", "cut.srt"):
         assert (tmp_path / f"recording.{name}").is_file()
