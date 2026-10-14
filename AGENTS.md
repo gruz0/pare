@@ -15,6 +15,7 @@ chapters. It is a Python command-line tool that drives `ffmpeg`/`ffprobe` and as
 
 - `src/pare/cli.py` — entry point; `config.py` — options, TOML config, argparse
 - `pipeline.py` — the run, step by step; start here to follow the flow
+- `batch.py` — a folder or several recordings: transcript lookup by name, skip, summary
 - `probe.py` — ffprobe; `transcript.py` — locate/load SRT + word JSON; `srt.py` — parse, split, re-time
 - `silence.py` — what to cut; `timeline.py` — kept frame ranges, the single source of truth for timing
 - `audio.py` — sample-accurate audio cutting; `loudness.py` — two-pass loudnorm
