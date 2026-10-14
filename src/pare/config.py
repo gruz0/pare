@@ -29,6 +29,8 @@ class Options:
 
     video: Path
     srt: Path | None = None
+    # Folders or recordings to process one after another; empty for a single run.
+    batch: tuple[Path, ...] = ()
 
     # input
     transcript: Path | None = None
@@ -100,6 +102,7 @@ class Options:
     keep_work: bool = False
     work_dir: Path | None = None
     dry_run: bool = False
+    force: bool = False
     quiet: bool = False
 
 
@@ -127,6 +130,12 @@ examples:
   pare recording.mkv subs.srt --cut-by subs --pad 0.25
       Noisy room or background music: take pauses from the transcript instead.
 
+  pare ~/Videos/ --transcript transcripts/ --dry-run
+      Batch mode: list every recording in the folder and the transcript each
+      would use (transcripts/<name>/, transcripts/<name>.srt, or <name>.srt
+      next to the video). Drop --dry-run to process them; recordings that
+      already have a final.mp4 are skipped unless --force.
+
 Defaults can be set in ./pare.toml or ~/.config/pare/config.toml using the
 option names with underscores (silence_db = -40). Command-line flags win.
 Docs: https://github.com/gruz0/pare
@@ -147,11 +156,10 @@ def build_parser() -> argparse.ArgumentParser:
         argument_default=argparse.SUPPRESS,
     )
     parser.add_argument(
-        "video", type=Path, help="the recording (MKV, MP4, or anything FFmpeg reads)"
-    )
-    parser.add_argument(
-        "srt", type=Path, nargs="?", default=None,
-        help="Whisper subtitles for the recording (default: an .srt next to the video)",
+        "inputs", type=Path, nargs="+", metavar="INPUT",
+        help="the recording (MKV, MP4, or anything FFmpeg reads) and, optionally, its "
+        "Whisper subtitles (default: an .srt next to the video). A folder or several "
+        "recordings instead start batch mode.",
     )  # fmt: skip
     parser.add_argument("--version", action="version", version=f"pare {__version__}")
 
@@ -161,7 +169,8 @@ def build_parser() -> argparse.ArgumentParser:
     g = parser.add_argument_group("input")
     g.add_argument(
         "--transcript", type=Path, metavar="PATH",
-        help="a Parley output folder, an .srt, or a Whisper .json with word timings",
+        help="a Parley output folder, an .srt, or a Whisper .json with word timings; in "
+        "batch mode, the folder holding them (<name>/ or <name>.srt per recording)",
     )  # fmt: skip
     g.add_argument(
         "--words", type=Path, metavar="JSON",
@@ -348,7 +357,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--work-dir", type=Path, metavar="DIR",
         help="where intermediates go (default: <name>.pare-work in the output folder)",
     )  # fmt: skip
-    flag(g, "--dry-run", "print the cut list and summary, then stop")
+    flag(
+        g,
+        "--dry-run",
+        "print the cut list and summary, then stop (batch mode: list what "
+        "would be processed and with which transcript)",
+    )
+    flag(g, "--force", "batch mode: also process recordings whose final.mp4 already exists")
     g.add_argument("-q", "--quiet", action="store_true", help="show only warnings and errors")
     g.add_argument("--config", type=Path, metavar="FILE", help="read defaults from this TOML file")
     return parser
@@ -406,7 +421,7 @@ def load_config(path: Path | None) -> dict[str, object]:
     except tomllib.TOMLDecodeError as exc:
         raise PareError(f"Config {path} is not valid TOML: {exc}") from exc
     hints = typing.get_type_hints(Options)
-    allowed = {f.name for f in dataclasses.fields(Options)} - {"video", "srt"}
+    allowed = {f.name for f in dataclasses.fields(Options)} - {"video", "srt", "batch"}
     values: dict[str, object] = {}
     for raw_key, value in data.items():
         key = raw_key.replace("-", "_")
@@ -449,6 +464,12 @@ def _validate(o: Options) -> None:
         (not (o.plan and o.no_ai), "--plan and --no-ai cannot be combined"),
         (o.audio_bitrate[:1].isdigit() and o.audio_bitrate.rstrip("kK").isdigit(),
          "--audio-bitrate should look like 192k"),
+        (not (o.batch and o.plan), "--plan belongs to one recording; it cannot be used in "
+         "batch mode"),
+        (not (o.batch and o.words), "--words belongs to one recording; in batch mode put "
+         "<name>.json next to <name>.srt in the --transcript folder"),
+        (not (o.batch and o.work_dir), "--work-dir cannot be used in batch mode; each "
+         "recording gets <name>.pare-work in the output folder"),
     ]  # fmt: skip
     for ok, message in checks:
         if not ok:
@@ -460,9 +481,29 @@ def _validate(o: Options) -> None:
             raise PareError(f"Invalid option: --fps {o.fps!r} is not a frame rate.") from exc
 
 
+def split_inputs(inputs: list[Path]) -> dict[str, object]:
+    """Tell a single run (``RECORDING [SRT]``) from batch mode (a folder, or several files).
+
+    Two inputs are a recording and its subtitles when the second is an ``.srt``.
+    """
+    if len(inputs) == 1 and not inputs[0].is_dir():
+        return {"video": inputs[0], "srt": None}
+    if len(inputs) == 2 and inputs[1].suffix.lower() == ".srt" and not inputs[0].is_dir():
+        return {"video": inputs[0], "srt": inputs[1]}
+    transcripts = [p for p in inputs if p.suffix.lower() in (".srt", ".json")]
+    if transcripts:
+        raise PareError(
+            f"{transcripts[0]} looks like a transcript, but several inputs mean batch mode, "
+            "where each recording's transcript is found by name. Put them in one folder and "
+            "pass it with --transcript DIR, or name each <recording>.srt next to its video."
+        )
+    return {"video": Path(), "srt": None, "batch": tuple(inputs)}
+
+
 def parse_args(argv: list[str] | None = None) -> Options:
     """Resolve defaults, config file and command line into :class:`Options`."""
     given = vars(build_parser().parse_args(argv))
+    given.update(split_inputs(given.pop("inputs")))
     config_path = given.pop("config", None)
     values = load_config(config_path)
     values.update(given)

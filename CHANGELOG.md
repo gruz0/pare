@@ -13,6 +13,10 @@ All notable changes to Pare are recorded here. The format follows
 - The plan has a `label` per clip, shown on its badge with a counter: "Coming up 2/3 · The fix".
 - `--splash-image FILE` uses an image as the splash, and `--outro-image FILE`
   (`--outro-duration`) ends the video with one.
+- Batch mode: `pare ~/Videos/ --transcript transcripts/` processes every recording in a folder (or
+  several files), finding each transcript by name. Finished recordings are skipped unless
+  `--force`, a failure does not stop the rest, and a summary lists what was done, skipped and
+  failed. `--dry-run` shows which transcript each recording would use.
 
 ### Changed
 

@@ -117,12 +117,20 @@ YouTube's rules ([support page](https://support.google.com/youtube/answer/988457
 - **Atomic output.** The final video and the text outputs are written to `*.part` and renamed on success.
 - **Re-render cache.** With `--keep-work`, the main encode is reused when a fingerprint of everything it depends on (source file, timeline, audio selection, loudness settings, caption script, encoder settings, FFmpeg version) is unchanged.
 
-## 11. Testing
+## 11. Batch mode
+
+- **Folder or several files in place of the recording.** One input is a single run, as is a recording followed by an `.srt`. Anything else (a folder, or two or more recordings) is a batch. A folder is not searched recursively, and Pare's own `*.final.mp4` results in it are not taken for recordings, so results can sit next to the originals.
+- **Transcripts are found by name**, never guessed: `--transcript DIR` names the folder that holds them. A Parley folder `<name>/` comes first, then `<name>.srt` (plus `<name>.json` for word timing, which is how `whisperx --output_dir` lays files out), then `<name>.json` alone, then `<name>.srt` next to the video. Options that belong to one recording (`--plan`, `--words`, `--work-dir`, an SRT argument) are refused rather than applied to every recording.
+- **"Done" means `<name>.final.mp4` exists.** It is written only on success (atomic rename), so a failed or interrupted recording is retried on the next run and a finished one is not. `--force` redoes everything; for a changed plan, re-render that one recording with `--plan`.
+- **Every problem found before encoding is reported up front** (no transcript, two recordings that would write the same result with `-o`), and `--dry-run` shows them all without decoding anything. Failures during a run are collected and summarised at the end; the exit code is 1 if any recording failed.
+- **One at a time.** FFmpeg already uses every core for the encode, so running recordings in parallel would not finish sooner.
+
+## 12. Testing
 
 Tests generate their own footage with FFmpeg (`testsrc2` plus a gated tone standing in for speech) and use `examples/fake_llm.sh`, a deterministic stand-in for the LLM. They need no real footage, GPU or network, and a stub `claude` is put first on `PATH` so the real CLI can never be called by accident.
 
 Beyond the test suite, Pare was run on three of the author's real OBS recordings (1080p60 HEVC, three AAC tracks at 44.1 kHz, 2 to 9.5 minutes) with the real `claude -p`.
 
-## 12. Not in v1
+## 13. Not in v1
 
-In PRD order: built-in transcription via Parley, vertical 9:16 export, a thumbnail helper, batch mode. Also deliberately left out: hardware encoding, and loudness limiting as an alternative to dynamic mode.
+In PRD order: built-in transcription via Parley, vertical 9:16 export, a thumbnail helper. Also deliberately left out: hardware encoding, and loudness limiting as an alternative to dynamic mode.

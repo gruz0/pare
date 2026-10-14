@@ -126,6 +126,17 @@ If OBS records the same microphone on more than one track, Parley's automatic mo
 
 Any other Whisper SRT works just as well; Parley is supported, not required.
 
+### A whole folder at once
+
+Give Pare a folder (or several recordings) instead of one file and it processes them one after another:
+
+```bash
+pare ~/Videos/ --transcript transcripts/ --dry-run   # see what it would do
+pare ~/Videos/ --transcript transcripts/
+```
+
+Each recording finds its transcript by name: a Parley folder `transcripts/<name>/`, a `transcripts/<name>.srt` (with `<name>.json` word timing beside it, if there is one), or `<name>.srt` next to the video. A recording that already has its `<name>.final.mp4` is skipped, so running the same command again only picks up what is new or failed (`--force` makes everything again). One failure does not stop the rest; at the end Pare lists what was done, skipped and failed, and why, and exits non-zero if anything failed. Every other option applies to each recording.
+
 ## Common options
 
 | Option                             | What it does                                                   | Default                           |

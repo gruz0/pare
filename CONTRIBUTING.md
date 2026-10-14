@@ -12,7 +12,7 @@ welcome, especially the kind below.
   [docs/tuning.md](docs/tuning.md): if a setting fixed a problem for you, write it down.
 - **The stretch goals** from the original plan, in rough priority order: optional built-in
   transcription via [Parley](https://github.com/gruz0/parley), vertical 9:16 export for Shorts, a
-  thumbnail helper, batch mode for a folder. Open an issue first so we can agree on the approach.
+  thumbnail helper. Open an issue first so we can agree on the approach.
 
 ## Before you start
 
