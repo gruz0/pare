@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import synth
-from conftest import needs_ffmpeg
+from conftest import ENCODER, needs_ffmpeg
 from helpers import audio_samples, frame_means, frame_times, stream
 from pare import audio, render
 from pare.probe import probe
@@ -89,7 +89,7 @@ def test_flash_and_beep_stay_together_over_100_cuts(tmp_path, fps):
     piece = render.encode_main(
         tmp_path, src, timeline,
         size=(info.width, info.height), pcm_name="cut.f32", audio_filter=None,
-        captions_name=None, encoding=render.Encoding(crf=20, preset="ultrafast"),
+        captions_name=None, encoding=render.Encoding(crf=20, preset="ultrafast", encoder=ENCODER),
         reporter=Reporter(quiet=True),
     )  # fmt: skip
     out = tmp_path / piece.name

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -10,7 +11,7 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from pare import audio, captions, chapters, ffmpeg, loudness, render, silence, srt
+from pare import audio, captions, chapters, encoders, ffmpeg, loudness, render, silence, srt
 from pare import plan as planning
 from pare import transcript as transcripts
 from pare.config import DEFAULT_CLIPS, Options
@@ -216,7 +217,7 @@ def _main_key(
             options.no_loudnorm, options.lufs, options.true_peak, options.single_pass_loudnorm
         ],
         "captions": ass,
-        "encode": [options.crf, options.preset],
+        "encode": dataclasses.astuple(encoding_for(options)),
         "ffmpeg": ffmpeg.version(),
     }  # fmt: skip
     return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
@@ -229,7 +230,7 @@ def render_main(
     audio_source: str,
     ass: str | None,
     work: Path,
-    encoding: render.Encoding,
+    encoding: encoders.Encoding,
     reporter: Reporter,
 ) -> render.Piece:
     """Cut the audio, measure loudness and run the main encode (or reuse it)."""
@@ -302,6 +303,12 @@ def badge_text(label: str, index: int, count: int, title: str) -> str:
     return f"{label} · {title.strip()}" if title.strip() else label
 
 
+def encoding_for(options: Options) -> encoders.Encoding:
+    """The encoder settings every piece of the video is made with."""
+    crf = encoders.DEFAULT_CRF[options.encoder] if options.crf is None else options.crf
+    return encoders.Encoding(crf=crf, preset=options.preset, encoder=options.encoder)
+
+
 def run(options: Options, reporter: Reporter) -> None:
     """Run the whole pipeline for one recording."""
     started = time.monotonic()
@@ -361,6 +368,9 @@ def run(options: Options, reporter: Reporter) -> None:
     outro_image = options.outro_image.expanduser() if options.outro_image else None
     splash_dims = render.image_size(splash_image, "--splash-image") if splash_image else None
     outro_dims = render.image_size(outro_image, "--outro-image") if outro_image else None
+    # Likewise a GPU encoder that cannot open.
+    encoding = encoding_for(options)
+    encoders.check(encoding, (render.even(info.width), render.even(info.height)), timeline.fps)
 
     out.final.parent.mkdir(parents=True, exist_ok=True)
     out.work.mkdir(parents=True, exist_ok=True)
@@ -396,7 +406,6 @@ def run(options: Options, reporter: Reporter) -> None:
         if not same_file:
             _write_text(out.plan, plan_json)
 
-    encoding = render.Encoding(crf=options.crf, preset=options.preset)
     ass: str | None = None
     if want_captions:
         style = captions.CaptionStyle(

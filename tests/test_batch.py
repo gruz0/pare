@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from conftest import FAKE_LLM, needs_ffmpeg, run_pare
+from conftest import ENCODER, FAKE_LLM, needs_ffmpeg, run_pare
 from pare import batch, config
 from pare.errors import PareError
 
-FAST = ["--preset", "ultrafast", "--crf", "30", "-q"]
+FAST = ["--encoder", ENCODER, "--preset", "ultrafast", "--crf", "30", "-q"]
 
 
 def touch(path: Path, text: str = "") -> Path:

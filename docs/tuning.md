@@ -63,6 +63,7 @@ Whisper's cue times are approximate: cues often start a little early, end late, 
 ## Speed and size
 
 - **Faster drafts**: `--preset veryfast` (larger file, same look) while tuning; go back to `medium` or `slow` for the upload.
+- **Encode on the GPU**: `--encoder nvenc` (NVIDIA), `vaapi` (Intel or AMD on Linux) or `videotoolbox` (macOS). Pare checks before the run that the encoder works and says what is missing if it does not. GPU encoders use their own quality scale; the default (22) looks about like x264's 18, with somewhat larger files. Lower it for more quality, raise it for smaller files.
 - **Smaller files**: `--crf 20` to `23`, or `--preset slow`.
 - **Iterating on the plan**: `--keep-work` reuses the main encode as long as nothing it depends on changed.
 - **Slow disk** (for example a Windows drive under WSL): `--work-dir /tmp/pare-work` keeps intermediates on a fast one.

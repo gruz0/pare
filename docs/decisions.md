@@ -91,7 +91,7 @@ Cue text is made literal for ASS: `{`, `}` and `\` would start override tags, so
 - **Clips are marked as previews and the video's start is marked too.** On real recordings the clips ran straight into the video and it was not clear where the video began. Each clip now has a "Coming up" badge (`--teaser-label`) and a 1 s fade (`--clip-fade`, capped at a quarter of the clip), and a 1.5 s splash card follows the last clip (`--splash-text`, `--no-splash`). The badge is two `drawbox` filters and a `drawtext`, with the box sized from the measured text width, so the accent strip matches it. Cross-fades between pieces were not used: they would need every piece decoded and re-encoded together, where the join is now a stream copy.
 - **Clip labels come from the plan.** The same badge on every clip says little, so the LLM also writes a two-to-four-word `label` per clip and the badge adds a counter. `why` stays a private note; `label` is what viewers see, which is why they are separate fields. A missing label is not an error, so plans written before this still load.
 - **Image cards (`--splash-image`, `--outro-image`)** are a looped still scaled by FFmpeg, encoded like every other piece, so the join stays a stream copy. The image path is an input argument, never part of the graph. An image within 3 % of the frame's aspect ratio is scaled to fill and cropped (a 2752×1536 banner on 1920×1080 loses 8 pixels a side, rather than gaining two thin bars); anything else is fitted and padded. On frames 720 pixels or taller the conversion uses the BT.709 matrix, which is what players assume for HD; with the scaler's BT.601 default a solid `#F2AA4C` image (242, 170, 76) plays back as (250, 171, 73), with BT.709 as (243, 169, 77). The outro is added even with `--no-ai` and does not count as teaser, so chapter times are unaffected.
-- **Hardware encoding: not in v1.** The PRD asked for it only if simple and safe; encoder availability and quality settings differ too much between machines.
+- **Hardware encoding** is opt-in with `--encoder`; see [section 14](#14-hardware-encoding).
 - **Progress** comes from FFmpeg's `-progress` stream: a single updating line in a terminal, one line per 10 % otherwise.
 
 ## 8. Chapters (FR-9)
@@ -133,4 +133,40 @@ Beyond the test suite, Pare was run on three of the author's real OBS recordings
 
 ## 13. Not in v1
 
-In PRD order: built-in transcription via Parley, vertical 9:16 export, a thumbnail helper. Also deliberately left out: hardware encoding, and loudness limiting as an alternative to dynamic mode.
+In PRD order: built-in transcription via Parley, vertical 9:16 export, a thumbnail helper. Also deliberately left out: loudness limiting as an alternative to dynamic mode. (Hardware encoding, left out of v1, came later: section 14.)
+
+## 14. Hardware encoding
+
+`--encoder nvenc|vaapi|videotoolbox` moves the encode to the GPU; `x264` stays the default.
+
+- **Only the encode moves.** Decoding, the frame-rate conversion, the cut (`select`), captions and every other filter stay on the CPU, so the graphs and their timing are the same for every encoder. For VAAPI each graph ends with `format=nv12,hwupload`, and the device is `/dev/dri/renderD128`.
+- **Every piece uses the same encoder and settings.** The join is a stream copy, so card, clips, splash, outro and main video all come from one `Encoding`. The encoder is part of the `--keep-work` fingerprint.
+- **Checked before the run.** After the dry-run point and before the LLM call or any encode, Pare looks for the encoder in `ffmpeg -encoders` and makes a three-frame test encode at the video's size, rate and settings. A missing encoder, a missing driver or device, or settings the hardware refuses fail in under a second, with FFmpeg's own message, a hint for that encoder (`nvidia-smi`, `vainfo`, Apple Silicon) and the way back to `x264`. Batch mode checks once up front, so an unusable encoder does not fail every recording separately.
+- **Quality settings.** `--crf` becomes the encoder's own constant-quality setting: `-rc vbr -cq N -b:v 0` for NVENC (without `-b:v 0` NVENC caps the rate at 2 Mb/s; `-cq 0` would mean "automatic", so 0 becomes 1), `-rc_mode CQP -qp N` for VAAPI (constant QP is what both Intel and AMD drivers support), and `-q:v` from 100 − 2N for VideoToolbox (1 to 100, higher is better; constant quality only works on Apple Silicon). The GPU encoders also get `-profile:v high`, since NVENC would otherwise write Main.
+- **The numbers are not equivalent.** Two 30 s segments of real 1080p60 screen recordings (screen plus webcam overlay), made lossless first and then encoded, scored with SSIM against the lossless reference:
+
+  | Encoder, setting             | Segment A: SSIM dB, Mb/s | Segment B: SSIM dB, Mb/s |
+  | ---------------------------- | ------------------------ | ------------------------ |
+  | x264 medium, crf 18          | 23.40, 1.75              | 23.15, 1.53              |
+  | x264 veryfast, crf 18        | 21.53, 1.02              | 20.96, 0.90              |
+  | NVENC p5, cq 18              | 25.85, 4.44              | 25.20, 3.54              |
+  | NVENC p5, cq 21              | 24.00, 3.33              | 23.21, 2.85              |
+  | NVENC p5, cq 23              | 23.15, 2.25              | 22.68, 1.83              |
+  | NVENC p5, cq 25              | 22.04, 1.56              | 21.64, 1.38              |
+  | NVENC p4 / p7, cq 23         | 23.11 / 23.27, 2.26      | 22.61 / 22.75, 1.87      |
+  | NVENC p5, cq 23 + spatial AQ | 23.21, 2.54              | 23.42, 2.65              |
+
+  NVENC at cq 18 is a much higher quality point than x264 at crf 18, at well over twice the size. Around cq 22 it matches x264's crf 18, at about 1.3 to 1.4 times the bitrate. So when `--crf` is not given, the default follows the encoder: 18 for x264, 22 for the GPU encoders. VAAPI and VideoToolbox use 22 as well, unmeasured: VideoToolbox needs a Mac, and WSL2, where this was measured, has no VAAPI driver, so VAAPI was only tested for its error message. Spatial AQ only added bitrate, so it is left off.
+
+- **Speed presets.** `--preset` maps to NVENC's p1 to p7; `medium` is p4, NVENC's own default. p4, p5 and p7 gave the same picture to within 0.05 dB, while p4 encoded fastest. VAAPI and VideoToolbox have no presets, and `--preset` does nothing for them.
+- **Measured speed** (RTX 3060 Ti, 6-core CPU, WSL2, FFmpeg 5.1.9; two real 1080p60 HEVC recordings with captions, a title card, three clips, an image splash and outro; whole runs including everything before the encode):
+
+  | Recording      | x264 medium, crf 18: whole run (main encode), size | NVENC p4, cq 22: whole run (main encode), size |
+  | -------------- | -------------------------------------------------- | ---------------------------------------------- |
+  | 5:20, 54 cuts  | 3:28 and 3:07 (2:35 and 2:19), 76 MB               | 2:05 and 2:09 (1:21 and 1:24), 127 MB          |
+  | 9:26, 107 cuts | 4:49 and 4:39 (3:49 and 3:41), 124 MB              | 3:12 (2:18), 197 MB                            |
+
+  The whole run is about 1.5 times faster and the main encode about 1.7 times; the teaser pieces and the final join barely change, since they are short and mostly decoding. The machine was shared, so runs under load were left out (they were slower for both encoders, by up to a quarter). For comparison, x264 `--preset veryfast` took 2:14 on the 5:20 recording with a 53 MB file, but its picture is clearly worse (about 2 dB lower SSIM in the table above). In whole files NVENC was 1.6 times the size of x264's.
+
+- **Why not faster on FFmpeg 5.1.** The CPU side alone (HEVC decoding, cut and captions) takes about 7 s per minute of this footage. FFmpeg before 7.0 runs filters and encoder on one thread, so the time spent handing each frame to NVENC adds to it instead of overlapping: 12 to 17 s per minute, whatever the preset (p1 was no faster than p7, and `-surfaces`, `-delay 0`, `-bf 0` and uploading to CUDA inside the graph made no reliable difference). x264 medium takes 26 s. With FFmpeg 7.1 (Debian 13, same GPU), where every stage has its own thread, NVENC costs only about 1.5 s per minute over the filters, about 10 s against x264's 26 s. Decoding on the GPU too would help further, but frames would have to come back to the CPU for the filters, so it was left out.
+- **Tests.** CI has no GPU: there the option is tested for its error message, and `PARE_ENCODER=nvenc .venv/bin/pytest` runs the whole suite, including the format, frame-timing and sync tests, on a GPU encoder. That suite passes with NVENC on FFmpeg 5.1 and 7.1, byte-identical re-renders included.

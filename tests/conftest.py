@@ -13,6 +13,9 @@ from pare.cli import main
 
 ROOT = Path(__file__).resolve().parent.parent
 FAKE_LLM = str(ROOT / "examples" / "fake_llm.sh")
+# The video encoder the runs use. PARE_ENCODER=nvenc (or vaapi, videotoolbox) runs the
+# whole suite on a GPU encoder, on a machine that has one.
+ENCODER = os.environ.get("PARE_ENCODER", "x264")
 
 needs_ffmpeg = pytest.mark.skipif(
     shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None,

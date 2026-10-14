@@ -39,5 +39,8 @@ splash_text = "Let's get started"    # card between the last clip and the video
 # --- output ------------------------------------------------------------------
 crf = 18
 preset = "medium"       # "slow" for smaller files, "veryfast" for quick drafts
+# encoder = "nvenc"     # encode on the GPU: "nvenc" (NVIDIA), "vaapi" (Intel/AMD on
+#                       # Linux), "videotoolbox" (macOS); crf then means that
+#                       # encoder's own quality scale
 # output_dir = "~/Videos/polished"
 # embed_chapters = true

@@ -13,14 +13,11 @@ from pathlib import Path
 
 from pare import __version__
 from pare.captions import POSITIONS
+from pare.encoders import DEFAULT_CRF, ENCODERS, PRESETS
 from pare.errors import PareError
 from pare.plan import DEFAULT_LLM_CMD
 from pare.probe import parse_fps
 from pare.silence import DEFAULT_FILLERS
-
-PRESETS = (
-    "ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow",
-)  # fmt: skip
 
 
 @dataclass(frozen=True)
@@ -95,7 +92,9 @@ class Options:
 
     # output
     output_dir: Path | None = None
-    crf: int = 18
+    encoder: str = "x264"
+    # None: the encoder's own default (DEFAULT_CRF), so switching encoders keeps the look.
+    crf: int | None = None
     preset: str = "medium"
     audio_bitrate: str = "192k"
     embed_chapters: bool = False
@@ -341,12 +340,20 @@ def build_parser() -> argparse.ArgumentParser:
         help="where to write results (default: next to the video)",
     )  # fmt: skip
     g.add_argument(
+        "--encoder", choices=ENCODERS, metavar="NAME",
+        help="video encoder: x264 on the CPU, or nvenc (NVIDIA), vaapi (Intel/AMD on "
+        f"Linux) or videotoolbox (macOS) on the GPU (default: {d.encoder})",
+    )  # fmt: skip
+    g.add_argument(
         "--crf", type=int, metavar="N",
-        help=f"x264 quality, lower is better and bigger (default: {d.crf})",
+        help="quality, lower is better and bigger; each encoder has its own scale "
+        f"(default: {DEFAULT_CRF['x264']} for x264, {DEFAULT_CRF['nvenc']} for the GPU "
+        "encoders, which looks about the same)",
     )  # fmt: skip
     g.add_argument(
         "--preset", choices=PRESETS, metavar="NAME",
-        help=f"x264 speed preset, ultrafast..veryslow (default: {d.preset})",
+        help="speed preset, ultrafast..veryslow, for x264 and nvenc "
+        f"(default: {d.preset})",
     )  # fmt: skip
     g.add_argument(
         "--audio-bitrate", metavar="RATE", help=f"AAC bitrate (default: {d.audio_bitrate})"
@@ -441,6 +448,7 @@ def _validate(o: Options) -> None:
         (o.teaser_order in ("card-first", "clips-first"), "teaser_order must be card-first or "
          "clips-first"),
         (o.preset in PRESETS, f"preset must be one of {', '.join(PRESETS)}"),
+        (o.encoder in ENCODERS, f"encoder must be one of {', '.join(ENCODERS)}"),
         (o.audio_track >= 1, "--audio-track counts from 1"),
         (o.silence_db is None or o.silence_db < 0, "--silence-db must be negative, e.g. -35"),
         (o.min_silence > 0, "--min-silence must be positive"),
@@ -449,7 +457,7 @@ def _validate(o: Options) -> None:
         (-70 <= o.lufs <= -5, "--lufs must be between -70 and -5"),
         (-9 <= o.true_peak <= 0, "--true-peak must be between -9 and 0"),
         (o.clips is None or 0 <= o.clips <= 10, "--clips must be between 0 and 10"),
-        (0 <= o.crf <= 51, "--crf must be between 0 and 51"),
+        (o.crf is None or 0 <= o.crf <= 51, "--crf must be between 0 and 51"),
         (0.5 <= o.title_duration <= 30, "--title-duration must be between 0.5 and 30"),
         (0 <= o.clip_fade <= 5, "--clip-fade must be between 0 and 5"),
         (0.5 <= o.outro_duration <= 30, "--outro-duration must be between 0.5 and 30"),
