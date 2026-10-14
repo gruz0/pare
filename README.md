@@ -122,6 +122,8 @@ pare ~/Videos/recording.mkv --transcript transcripts/recording/
 
 Pare picks up the `.srt` and, when it is there, the `.json` with word-level timing. With word timing a cut never lands inside a word, long captions are split exactly where a word starts, and you can add `--remove-fillers` to cut "um" and "uh". Speaker labels such as `[Alex]:` are stripped from captions (keep them with `--keep-speakers`).
 
+If OBS records the same microphone on more than one track, Parley's automatic mode transcribes the second track as a guest and writes every sentence twice, as `[Me]:` and `[Guest 1]:`. Pare drops the repeats and warns; to avoid them, run Parley with `SPEAKERS='1 1'` for a solo recording.
+
 Any other Whisper SRT works just as well; Parley is supported, not required.
 
 ## Common options

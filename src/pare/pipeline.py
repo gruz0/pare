@@ -174,11 +174,20 @@ def prepare_cues(
     transcript: transcripts.Transcript,
     timeline: Timeline,
     removed_fillers: set[str],
+    reporter: Reporter,
 ) -> list[srt.Cue]:
     """Clean, split and re-time the subtitles onto the edited timeline."""
     cues = transcript.cues
     if not options.keep_speakers:
         cues = srt.strip_speakers(cues)
+    cues, repeats = srt.drop_repeats(cues)
+    if repeats:
+        reporter.warn(
+            f"dropped {repeats} subtitle(s) that repeat the one before at the same time. "
+            "This usually means the same microphone was recorded on two audio tracks and "
+            "Parley transcribed the second one as a guest; for a solo recording run Parley "
+            "with SPEAKERS='1 1'."
+        )
     if removed_fillers:
         cues = srt.remove_words(cues, removed_fillers)
     word_starts = None
@@ -331,7 +340,11 @@ def run(options: Options, reporter: Reporter) -> None:
     if not options.no_cuts:
         print_summary(timeline, reporter)
 
-    cues = prepare_cues(options, transcript, timeline, removed_fillers) if transcript.cues else []
+    cues = (
+        prepare_cues(options, transcript, timeline, removed_fillers, reporter)
+        if transcript.cues
+        else []
+    )
     if transcript.cues and not cues and (want_captions or want_plan):
         raise PareError(
             "No subtitles are left after cutting: the subtitle times do not line up with "

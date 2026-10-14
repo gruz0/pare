@@ -81,6 +81,29 @@ def test_strips_bare_names_only_when_they_dominate():
     assert [c.text for c in srt.strip_speakers(labelled)] == [f"line {i}" for i in range(6)]
 
 
+def test_drops_cues_repeated_under_another_speaker():
+    """The same mic on two tracks: Parley writes every sentence as [Me] and [Guest 1]."""
+    doubled = []
+    for i, line in enumerate(["Hello there.", "Hello there.", "Second line."]):
+        doubled += [Cue(i, i + 1, f"[Me]: {line}"), Cue(i + 0.01, i + 1, f"[Guest 1]: {line}")]
+    cues, dropped = srt.drop_repeats(srt.strip_speakers(doubled))
+    # A sentence said twice in a row at different times stays.
+    assert [(c.start, c.text) for c in cues] == [
+        (0, "Hello there."),
+        (1, "Hello there."),
+        (2, "Second line."),
+    ]
+    assert dropped == 3
+    # With the labels kept, the first speaker's cue is the one that stays.
+    kept, dropped = srt.drop_repeats(doubled)
+    assert [c.text for c in kept] == [
+        "[Me]: Hello there.",
+        "[Me]: Hello there.",
+        "[Me]: Second line.",
+    ]
+    assert dropped == 3
+
+
 def test_remove_words():
     cues = [
         Cue(0, 1, "Um, so this is, uh, the plan."),
