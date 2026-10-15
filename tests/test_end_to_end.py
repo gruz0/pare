@@ -64,6 +64,7 @@ def test_all_outputs_are_written(full):
         "lesson.final.mp4",
         "lesson.pare-work",
         "lesson.plan.json",
+        "lesson.youtube.md",
     ]
     assert decode_errors(full / "lesson.final.mp4") == ""
 
@@ -125,6 +126,20 @@ def test_chapters_follow_youtube_rules(full):
         for p in [work / "card.mov", work / "splash.mov", *work.glob("clip*.mov")]
     )
     assert starts[1] == teaser // 30
+
+
+def test_youtube_metadata_file(full):
+    text = (full / "lesson.youtube.md").read_text()
+    plan = json.loads((full / "lesson.plan.json").read_text())
+    for title in plan["titles"]:
+        assert f". {title}\n" in text
+    description = re.search(r"## Description\n\n```text\n(.*?)\n```", text, re.S)[1]
+    assert description.endswith((full / "lesson.chapters.txt").read_text().strip())
+    assert description.startswith(plan["description"])
+    assert len(description) <= 5000
+    assert ", ".join(plan["tags"]) in text
+    assert plan["pinned_comment"] in text
+    assert all(f"- `{stem}`" in text for stem in plan["filenames"])
 
 
 def test_cut_srt_is_retimed_and_clean(full):
@@ -193,14 +208,32 @@ def test_edited_plan_changes_the_result_without_calling_an_llm(
     plan["topics"] = ["My own topic"]
     plan["clips"] = plan["clips"][:2]
     plan["chapters"][1]["title"] = "Renamed by hand"
+    plan["titles"] = ["My own title"]
     edited = tmp_path / "edited.json"
     edited.write_text(json.dumps(plan))
     out = tmp_path / "out"
     code = run_pare(video, subs, "--plan", edited, "--llm-cmd", "false", "-o", out, *FAST)
     assert code == 0
     assert "Renamed by hand" in (out / "lesson.chapters.txt").read_text()
+    youtube = (out / "lesson.youtube.md").read_text()
+    assert "1. My own title\n" in youtube and "Renamed by hand" in youtube
     assert seconds(out / "lesson.final.mp4") < seconds(full / "lesson.final.mp4") - 3
     assert capsys.readouterr().err == ""  # an edited plan is taken as written, no nagging
+
+
+def test_plan_without_metadata_writes_no_metadata_file(full, long_recording, tmp_path, capsys):
+    video, subs = long_recording
+    plan = json.loads((full / "lesson.plan.json").read_text())
+    for key in ("titles", "description", "tags", "pinned_comment", "filenames"):
+        del plan[key]
+    edited = tmp_path / "edited.json"
+    edited.write_text(json.dumps(plan))
+    out = tmp_path / "out"
+    code = run_pare(video, subs, "--plan", edited, "--llm-cmd", "false", "-o", out, *FAST)
+    assert code == 0
+    assert capsys.readouterr().err == ""
+    assert (out / "lesson.chapters.txt").is_file()
+    assert not (out / "lesson.youtube.md").exists()
 
 
 def test_edited_plan_may_start_a_clip_in_the_opening(full, long_recording, tmp_path, capsys):

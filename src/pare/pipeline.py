@@ -12,7 +12,18 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from pare import audio, captions, chapters, encoders, ffmpeg, loudness, render, silence, srt
+from pare import (
+    audio,
+    captions,
+    chapters,
+    encoders,
+    ffmpeg,
+    loudness,
+    metadata,
+    render,
+    silence,
+    srt,
+)
 from pare import corrections as fixes
 from pare import plan as planning
 from pare import transcript as transcripts
@@ -33,6 +44,7 @@ class Outputs:
     chapters: Path
     plan: Path
     cut_srt: Path
+    youtube: Path
     work: Path
 
 
@@ -47,6 +59,7 @@ def output_paths(options: Options) -> Outputs:
         chapters=out_dir / f"{stem}.chapters.txt",
         plan=out_dir / f"{stem}.plan.json",
         cut_srt=out_dir / f"{stem}.cut.srt",
+        youtube=out_dir / f"{stem}.youtube.md",
         work=work or out_dir / f"{stem}.pare-work",
     )
 
@@ -424,7 +437,7 @@ def run(options: Options, reporter: Reporter) -> bool:
             )
             reporter.info(f"Using plan {options.plan.name}")
         else:
-            reporter.info("Asking the LLM for topics, highlights and chapters...")
+            reporter.info("Asking the LLM for topics, highlights, chapters and YouTube metadata...")
             plan = planning.make_plan(
                 options.llm_cmd,
                 cues,
@@ -601,6 +614,17 @@ def run(options: Options, reporter: Reporter) -> bool:
 
     if chapter_list:
         _write_text(out.chapters, chapters.format_youtube(chapter_list))
+    youtube = plan.metadata if plan is not None else metadata.Metadata()
+    if youtube.present():
+        description, shortened = metadata.full_description(
+            youtube.description, chapter_list, options.description_footer
+        )
+        if shortened:
+            reporter.warn(
+                f"the description was shortened to fit YouTube's {metadata.DESCRIPTION_LIMIT} "
+                "characters with the chapters and the footer"
+            )
+        _write_text(out.youtube, metadata.format_markdown(video.stem, youtube, description))
     if not options.keep_work:
         shutil.rmtree(out.work, ignore_errors=True)
 
@@ -610,10 +634,16 @@ def run(options: Options, reporter: Reporter) -> bool:
         reporter.info(
             f"  {out.chapters}  ({len(chapter_list)} chapters, paste into the description)"
         )
+    if youtube.present():
+        reporter.info(f"  {out.youtube}  (titles, description, tags, pinned comment to paste)")
     if plan is not None:
         reporter.info(f"  {out.plan}  (edit and re-run with --plan to change the teaser/chapters)")
     if cues:
         reporter.info(f"  {out.cut_srt}  (subtitles matching the edited video)")
     if options.keep_work:
         reporter.info(f"  {out.work}  (intermediates, kept)")
+    if youtube.filenames:
+        reporter.info("Suggested file names:")
+        for stem in youtube.filenames:
+            reporter.info(f"  {stem}{video.suffix}")
     return True

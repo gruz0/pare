@@ -2,10 +2,11 @@
 """A deterministic stand-in for ``claude -p``, for tests and demos.
 
 Reads Pare's prompt on stdin, finds the ``[start-end] text`` subtitle lines in
-it, and prints a plan built from them by fixed rules: no network, no model, the
-same answer every time. When asked for transcript corrections it suggests one
-for every near miss of a name the prompt lists as always spelled one way
-(``keyvo42`` for ``Kivo42``). Use it through ``examples/fake_llm.sh``:
+it, and prints a plan (with YouTube metadata) built from them by fixed rules:
+no network, no model, the same answer every time. When asked for transcript
+corrections it suggests one for every near miss of a name the prompt lists as
+always spelled one way (``keyvo42`` for ``Kivo42``). Use it through
+``examples/fake_llm.sh``:
 
     pare recording.mkv subs.srt --llm-cmd examples/fake_llm.sh
 """
@@ -91,6 +92,14 @@ def main() -> None:
 
     thirds = [cues[len(cues) * k // 3][2] for k in range(3)]
     plan = {"topics": [title(t, 35) for t in thirds], "clips": clips, "chapters": chapters}
+    # YouTube metadata, also taken from the captions.
+    if '"filenames"' in prompt:
+        words = re.findall(r"[a-z0-9]+", " ".join(t for _, _, t in cues[:3]).lower())
+        plan["titles"] = [title(t, 70) for t in thirds]
+        plan["description"] = "\n\n".join(t for _, _, t in cues[:2])
+        plan["tags"] = sorted({w for w in words if len(w) > 3})[:10]
+        plan["pinned_comment"] = f"What did you think of this: {title(cues[0][2], 60)}?"
+        plan["filenames"] = ["-".join(words[k : k + 6]) for k in (0, 2, 4)]
     if '"corrections"' in prompt:
         known = re.search(r"These names are always spelled like this: (.+?)\. Watch", prompt)
         names = [n.strip() for n in known[1].split(",")] if known else []
