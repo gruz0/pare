@@ -18,7 +18,10 @@ audio_track = 1         # OBS multi-track: 1 is usually the full mix
 lufs = -14.0            # target loudness
 
 # --- captions ----------------------------------------------------------------
-caption_position = "bottom-center"   # or "bottom-left", "top"
+caption_position = "bottom-center"   # or "bottom-left", "top", "middle"
+# caption_style = "classic"           # or "bold", "box", "karaoke", "pop" (the last two need word timing)
+# caption_highlight = "#FFD400"       # the spoken word in karaoke
+# caption_uppercase = true
 caption_max_chars = 42
 # caption_font = "DejaVu Sans"
 # caption_size = 48                  # pixels; default scales with the frame height

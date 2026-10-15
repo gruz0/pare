@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import struct
 import subprocess
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
@@ -129,3 +130,45 @@ def text_width(font: Path, text: str, size: float) -> float:
         return len(text) * size * _FALLBACK_ADVANCE
     units, widths, default = metrics
     return sum(widths.get(ord(ch), default) for ch in text) * size / units
+
+
+# fontconfig weights: 180 is semibold, 200 bold.
+_BOLD_WEIGHT = 200
+
+
+@dataclass(frozen=True)
+class FamilyCheck:
+    """What fontconfig knows about a caption font family."""
+
+    # The family is installed; libass would otherwise quietly use another font.
+    found: bool
+    # It has a bold face; without one libass would fake bold by smearing the outlines.
+    has_bold: bool
+    # The family fontconfig picks instead, when ``found`` is false.
+    substitute: str = ""
+
+
+def check_family(family: str) -> FamilyCheck:
+    """Ask fontconfig whether ``family`` is installed and has a bold face.
+
+    Without ``fc-match`` nothing can be checked, and the family is assumed to
+    be there with a bold face, as libass is then told.
+    """
+    if not shutil.which("fc-match"):
+        return FamilyCheck(found=True, has_bold=True)
+    result = subprocess.run(
+        ["fc-match", "-f", "%{family}|%{fullname}|%{weight}|%{embolden}", f"{family}:bold"],
+        capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    names, fullnames, weight, embolden = [*result.stdout.strip().split("|"), "", "", ""][:4]
+    known = {n.strip().casefold() for n in f"{names},{fullnames}".split(",") if n.strip()}
+    if result.returncode != 0 or family.strip().casefold() not in known:
+        return FamilyCheck(found=False, has_bold=True, substitute=names.split(",")[0])
+    try:
+        heaviest = max(int(w) for w in weight.strip("[]").split())
+    except ValueError:
+        heaviest = _BOLD_WEIGHT
+    # For a family without a bold face fontconfig offers the regular one, marked
+    # to be emboldened, and reports the weight it was asked for.
+    synthetic = embolden.strip().lower() == "true"
+    return FamilyCheck(found=True, has_bold=heaviest >= _BOLD_WEIGHT and not synthetic)
