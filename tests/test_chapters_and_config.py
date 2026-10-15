@@ -66,6 +66,26 @@ def test_caption_script_escapes_and_positions():
     assert next(x for x in top.splitlines() if x.startswith("Style:")).split(",")[18] == "8"
 
 
+def _margin_v(width: int, height: int, **style: object) -> int:
+    script = captions.build_ass([], width, height, captions.CaptionStyle(**style))
+    return int(next(x for x in script.splitlines() if x.startswith("Style:")).split(",")[21])
+
+
+@pytest.mark.parametrize(
+    ("width", "height", "bottom", "top"),
+    [(1280, 720, 79, 58), (1920, 1080, 119, 86), (3840, 2160, 238, 173)],
+)
+def test_caption_margin_clears_youtube_controls(width, height, bottom, top):
+    # YouTube's controls cover the bottom ~9 % of the player and its fullscreen
+    # title bar the top ~6 % (docs/decisions.md); captions sit above or below them.
+    assert _margin_v(width, height) == bottom
+    assert _margin_v(width, height, position="bottom-left") == bottom
+    assert bottom > 0.09 * height
+    assert _margin_v(width, height, position="top") == top
+    assert top > 0.06 * height
+    assert _margin_v(width, height, margin=43) == 43  # --caption-margin still wins
+
+
 def test_nominal_fps():
     assert probe.nominal_fps("30/1", "30/1") == (Fraction(30), False)
     assert probe.nominal_fps("60/1", "2997/50") == (Fraction(60), False)

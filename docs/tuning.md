@@ -40,7 +40,7 @@ Whisper's cue times are approximate: cues often start a little early, end late, 
 
 ## Captions
 
-- **Covering something**: `--caption-position top` or `bottom-left`; `--caption-margin 80` moves them away from the edge.
+- **Covering something**: `--caption-position top` or `bottom-left`; `--caption-margin 80` sets the distance from the edge in pixels. The default (11 % of the frame height, 119 px at 1080p; 8 % for `top`) keeps them clear of YouTube's progress and control bars, which would otherwise hide them on hover, on pause and on phones. Lower it for a platform without overlaid controls.
 - **Too big or too small**: `--caption-size 56` (pixels; the default is 4.2 % of the frame height, 45 px at 1080p).
 - **Lines too long or too short**: `--caption-max-chars 36`; `--caption-max-lines 1` for single-line captions.
 - **Another font**: `--caption-font "Noto Sans"` (any family fontconfig knows; `fc-list | grep -i noto`).
