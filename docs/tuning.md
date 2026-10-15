@@ -45,6 +45,7 @@ Whisper's cue times are approximate: cues often start a little early, end late, 
 - **Lines too long or too short**: `--caption-max-chars 36`; `--caption-max-lines 1` for single-line captions.
 - **Another font**: `--caption-font "Noto Sans"` (any family fontconfig knows; `fc-list | grep -i noto`).
 - **A separate caption track instead**: `--no-captions`, then upload `<name>.cut.srt`.
+- **Names spelled wrong**: list them as `vocabulary = ["Kivo42", "Claude Code"]` in `pare.toml` (or `--vocabulary "Kivo42,Claude Code"`); case and separator slips are then fixed on every video without asking. Other mishearings come back from the LLM as suggestions in `<name>.plan.json`: keep the right ones and re-run with `--plan`. Tired of reviewing: `--corrections accept`; not wanted: `--corrections off`.
 
 ## Teaser and chapters
 

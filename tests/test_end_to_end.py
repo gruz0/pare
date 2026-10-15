@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import itertools
 import json
 import os
@@ -666,3 +667,119 @@ def test_image_splash_and_outro(recording, tmp_path, capsys):
         assert run_pare(video, subs, *LLM, "-o", tmp_path / "bad", flag, path, *FAST) == 1
         assert flag in capsys.readouterr().err
         assert not (tmp_path / "bad").exists()
+
+
+def misheard(long_recording, folder: Path) -> Path:
+    """The lesson's subtitles with a product name misheard two ways (Keyvo42, keyvo42)."""
+    _, subs = long_recording
+    text = subs.read_text().replace("Raw recordings", "Keyvo42 recordings")
+    path = folder / "misheard.srt"
+    path.write_text(text.replace("what YouTube expects", "what keyvo42 expects"))
+    return path
+
+
+def test_suggested_corrections_are_reviewed_before_encoding(long_recording, tmp_path, capsys):
+    video, _ = long_recording
+    subs = misheard(long_recording, tmp_path)
+    out = tmp_path / "out"
+    common = [video, subs, "-o", out, *FAST]
+    assert run_pare(*common, *LLM, "--vocabulary", "Kivo42") == 0
+    err = capsys.readouterr().err
+    assert "stopped before encoding to review 2 suggested transcript correction(s)" in err
+    assert sorted(p.name for p in out.iterdir()) == ["lesson.plan.json"]
+    plan_file = out / "lesson.plan.json"
+    plan = json.loads(plan_file.read_text())
+    assert [(c["from"], c["to"]) for c in plan["corrections"]] == [
+        ("Keyvo42", "Kivo42"),
+        ("keyvo42", "Kivo42"),
+    ]
+    assert plan["chapters"][0]["title"].startswith("Keyvo42")  # saved as the LLM wrote it
+
+    # The reviewed plan renders captions, chapters and cut.srt with the fixed spelling.
+    assert run_pare(*common, "--plan", plan_file, "--llm-cmd", "false") == 0
+    assert capsys.readouterr().err == ""
+    cut = (out / "lesson.cut.srt").read_text()
+    assert "Kivo42 recordings" in cut and "what Kivo42 expects" in cut and "afe42" not in cut
+    chapter_list = (out / "lesson.chapters.txt").read_text()
+    assert "Kivo42 recordings" in chapter_list and "afe42" not in chapter_list
+
+    # Deleting an entry rejects it.
+    plan["corrections"] = plan["corrections"][:1]
+    edited = tmp_path / "edited.json"
+    edited.write_text(json.dumps(plan))
+    partial = tmp_path / "partial"
+    assert run_pare(video, subs, "--plan", edited, "--no-teaser", "-o", partial, *FAST) == 0
+    cut = (partial / "lesson.cut.srt").read_text()
+    assert "Kivo42 recordings" in cut and "what keyvo42 expects" in cut
+
+
+def test_corrections_accept_and_off(long_recording, tmp_path, capsys):
+    video, _ = long_recording
+    subs = misheard(long_recording, tmp_path)
+    common = [video, subs, *LLM, "--vocabulary", "Kivo42", "--no-teaser", *FAST]
+    accept, off = tmp_path / "accept", tmp_path / "off"
+    assert run_pare(*common, "--corrections", "accept", "-o", accept) == 0
+    assert run_pare(*common, "--corrections", "off", "-o", off) == 0
+    assert "stopped" not in capsys.readouterr().err
+    fixed, plain = (srt.read_srt(d / "lesson.cut.srt") for d in (accept, off))
+    assert "afe42" not in (accept / "lesson.cut.srt").read_text()
+    assert "Keyvo42" in (off / "lesson.cut.srt").read_text()
+    assert [(c.start, c.end) for c in fixed] == [(c.start, c.end) for c in plain]
+    assert seconds(accept / "lesson.final.mp4") == seconds(off / "lesson.final.mp4")
+    assert "corrections" in json.loads((accept / "lesson.plan.json").read_text())
+    assert "corrections" not in json.loads((off / "lesson.plan.json").read_text())
+
+
+def test_corrections_can_be_accepted_on_a_terminal(long_recording, tmp_path, monkeypatch):
+    class Terminal(io.StringIO):
+        def isatty(self) -> bool:
+            return True
+
+    video, _ = long_recording
+    subs = misheard(long_recording, tmp_path)
+    monkeypatch.setattr("sys.stdin", Terminal("\n"))
+    out = tmp_path / "yes"
+    assert (
+        run_pare(video, subs, *LLM, "--vocabulary", "Kivo42", "--no-teaser", "-o", out, *FAST) == 0
+    )
+    assert "afe42" not in (out / "lesson.cut.srt").read_text()
+    monkeypatch.setattr("sys.stdin", Terminal("n\n"))
+    out = tmp_path / "no"
+    assert (
+        run_pare(video, subs, *LLM, "--vocabulary", "Kivo42", "--no-teaser", "-o", out, *FAST) == 0
+    )
+    assert not (out / "lesson.final.mp4").exists()
+
+
+def test_a_merge_fix_keeps_the_cuts_in_place(recording, tmp_path, capsys):
+    """Fixes change the text and the word timings, never what is cut."""
+    video, subs = recording
+    words = [
+        {"word": word, "start": cue.start + i * step, "end": cue.start + (i + 0.9) * step}
+        for cue in srt.read_srt(subs)
+        for step in [(cue.end - cue.start) / len(cue.text.split())]
+        for i, word in enumerate(cue.text.split())
+    ]
+    folder = tmp_path / "talk"
+    folder.mkdir()
+    (folder / "talk.srt").write_text(subs.read_text())
+    (folder / "talk.json").write_text(json.dumps({"segments": [{"words": words}]}))
+    plan = {"topics": ["One"], "clips": [], "chapters": [{"start": 0, "title": "the first step"}]}
+    plans = {
+        "plain": plan,
+        "fixed": dict(plan, corrections=[{"from": "first step", "to": "first-step"}]),
+    }
+    results = {}
+    for name, content in plans.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(content))
+        out = tmp_path / name
+        args = [video, "--transcript", folder, "--plan", path, "--no-teaser", "--cut-by", "both"]
+        assert run_pare(*args, "-o", out, *FAST) == 0
+        results[name] = (srt.read_srt(out / "talk.cut.srt"), seconds(out / "talk.final.mp4"))
+    assert "does not occur" not in capsys.readouterr().err
+    (plain, plain_len), (fixed, fixed_len) = results["plain"], results["fixed"]
+    assert plain_len == fixed_len
+    assert [(c.start, c.end) for c in plain] == [(c.start, c.end) for c in fixed]
+    assert any("first-step" in c.text for c in fixed)
+    assert not any("first step" in c.text for c in fixed)

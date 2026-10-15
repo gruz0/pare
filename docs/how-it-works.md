@@ -67,6 +67,8 @@ Pare does not trust the answer. In code it checks the shape, clamps times to the
 
 The plan is saved as `recording.plan.json`. `--plan FILE` uses a plan as written and skips the LLM.
 
+The same request asks for transcript corrections: `{"from", "to", "why"}` for misheard names, products and jargon, judged from the whole transcript. Each `from` must occur in the subtitles. When there are any, Pare prints them with their times in the recording and stops before encoding (on a terminal it offers to apply them all and carry on); the user reviews them in the plan and re-runs with `--plan`. Corrections, and the `vocabulary` from the config (applied without review), change the subtitle text and the word timings together, never times, so the cuts stay where they were; then the subtitles are prepared again as in step 5. The plan's topics, clip labels and chapter titles get the same fixes.
+
 ## 7. Cut the audio
 
 The chosen track is decoded once to raw samples, and Pare keeps exactly the samples that belong to the kept frames, with a 5 ms fade at every cut so there are no clicks. Sample counts are chosen so the running total always matches the running total of video frames; rounding cannot build up into drift.
@@ -97,6 +99,6 @@ Chapter times are shifted by the length of the teaser. A teaser of 10 seconds or
 | --------------------- | ------------------------------------------------------------------- |
 | `<name>.final.mp4`    | H.264 (CRF 18), `yuv420p`, AAC 192 kb/s 48 kHz stereo, `+faststart` |
 | `<name>.chapters.txt` | Lines of `MM:SS Title` for the YouTube description                  |
-| `<name>.plan.json`    | Topics, clips and chapters, editable                                |
+| `<name>.plan.json`    | Topics, clips, chapters and transcript corrections, editable        |
 | `<name>.cut.srt`      | Subtitles matching the edited video                                 |
 | `<name>.pare-work/`   | Intermediates; removed on success unless `--keep-work`              |

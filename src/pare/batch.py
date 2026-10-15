@@ -21,8 +21,8 @@ from pare.ui import Reporter, clock
 
 VIDEO_SUFFIXES = (".mkv", ".mp4", ".mov", ".webm", ".avi", ".m4v", ".flv", ".ts", ".mts")
 
-# What a recording can be set to do; the summary adds DONE.
-TODO, SKIP, FAIL, DONE = "process", "skipped", "failed", "done"
+# What a recording can be set to do; the summary adds DONE and REVIEW.
+TODO, SKIP, FAIL, DONE, REVIEW = "process", "skipped", "failed", "done", "review"
 
 
 @dataclass(frozen=True)
@@ -206,7 +206,7 @@ def run(options: Options, reporter: Reporter) -> int:
             reporter.info(f"[{number}/{len(todo)}] {job.video}")
             began = time.monotonic()
             try:
-                pipeline.run(job.options, reporter)
+                made = pipeline.run(job.options, reporter)
             except PareError as exc:
                 reporter.info("")
                 print(f"pare: error: {job.video.name}: {exc}", file=sys.stderr)
@@ -216,8 +216,16 @@ def run(options: Options, reporter: Reporter) -> int:
                 results[job.video] = (FAIL, f"unexpected error: {exc!r}")
             else:
                 took = clock(time.monotonic() - began)
-                final = pipeline.output_paths(job.options).final
-                results[job.video] = (DONE, f"{final} (in {took})")
+                out = pipeline.output_paths(job.options)
+                results[job.video] = (
+                    (DONE, f"{out.final} (in {took})")
+                    if made
+                    else (
+                        REVIEW,
+                        f"transcript corrections to review in {out.plan}; then run it on its "
+                        "own with --plan, or the batch again with --corrections accept",
+                    )
+                )
     finally:
         _summary(jobs, results, time.monotonic() - started)
     return 1 if any(status == FAIL for status, _ in results.values()) else 0
@@ -228,9 +236,11 @@ def _summary(jobs: list[Job], results: dict[Path, tuple[str, str]], seconds: flo
     rows = [(*results.get(job.video, ("not run", "")), job.video) for job in jobs]
     counts = {
         status: sum(1 for row in rows if row[0] == status)
-        for status in (DONE, SKIP, FAIL, "not run")
+        for status in (DONE, REVIEW, SKIP, FAIL, "not run")
     }
-    parts = [f"{n} {status}" for status, n in counts.items() if n or status != "not run"]
+    parts = [
+        f"{n} {status}" for status, n in counts.items() if n or status not in ("not run", REVIEW)
+    ]
     print()
     print(f"Batch finished in {clock(seconds)}: {', '.join(parts)}.")
     _print_jobs([(status, video, detail) for status, detail, video in rows])

@@ -154,6 +154,8 @@ Each recording finds its transcript by name: a Parley folder `transcripts/<name>
 | `--caption-position`               | `bottom-center`, `bottom-left` or `top`                        | `bottom-center`                   |
 | `--no-ai`                          | No LLM: no title card, clips or chapters                       | off                               |
 | `--plan FILE`                      | Use this plan instead of asking the LLM                        | -                                 |
+| `--vocabulary LIST`                | Names always spelled this way, e.g. `"Kivo42,Claude Code"`     | -                                 |
+| `--corrections MODE`               | LLM transcript fixes: `review` first, `accept`, or `off`       | `review`                          |
 | `--clips N`                        | Number of highlight clips                                      | 3                                 |
 | `--no-teaser`                      | No card or clips (chapters still written)                      | off                               |
 | `--title-text TEXT`                | Card heading, e.g. in another language                         | "In this video"                   |
@@ -190,6 +192,33 @@ pare recording.mkv subs.srt --plan recording.plan.json --keep-work
 ```
 
 With `--plan` nothing is sent to an LLM and the same inputs give the same output. With `--keep-work` the slow main encode from the previous run is reused, so only the teaser is rebuilt: on a 9-minute recording that is about 30 seconds instead of 5 minutes. (Use `--keep-work` on the first run too, so there is something to reuse.) `recording.cut.srt` shows what is said when, which helps when picking times.
+
+## Fix misheard names before they are burned in
+
+Whisper gets names and jargon wrong ("cloud" for "Claude", "Polar Quest" for "pull request"), and burned-in captions cannot be fixed afterwards. So the LLM also looks for likely mistakes, and Pare stops **before encoding** to let you check them:
+
+```
+The LLM suggests 2 transcript corrections (times in the recording):
+   1. "keyvo42" -> "Kivo42"  at 0:12, 1:40, 4:02  (the product name)
+   2. "Polar Quest" -> "pull request"  at 3:15  (git jargon)
+warning: stopped before encoding to review 2 suggested transcript correction(s) in recording.plan.json. ...
+```
+
+They are in the `corrections` list of `recording.plan.json`, next to the topics, clips and chapters:
+
+```json
+"corrections": [{ "from": "keyvo42", "to": "Kivo42", "why": "the product name" }]
+```
+
+Delete the ones you do not want (or change their `to`), then render with `--plan recording.plan.json`. Every occurrence of `from` is replaced, in the captions, `cut.srt`, the chapters and the clip labels; word timings are fixed along with the text, so the cuts stay exactly where they were. When Pare runs in a terminal it asks instead whether to apply them all and carry on. `--corrections accept` applies them without stopping, which suits unattended batch runs; `--corrections off` does not ask for them.
+
+Names that are always right (your product, your channel, the tools you use) go in the config file, so you never review them again:
+
+```toml
+vocabulary = ["Kivo42", "Claude Code", "Acme.Cloud"]
+```
+
+They are fixed with no review step wherever only the case or a separator is off (`kivo42`, `claude code`, `acme cloud`), and the LLM is told them, so it catches real mishearings such as `keyvo42`.
 
 ## Privacy
 

@@ -7,11 +7,13 @@ import hashlib
 import json
 import os
 import shutil
+import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
 from pare import audio, captions, chapters, encoders, ffmpeg, loudness, render, silence, srt
+from pare import corrections as fixes
 from pare import plan as planning
 from pare import transcript as transcripts
 from pare.config import DEFAULT_CLIPS, Options
@@ -203,6 +205,30 @@ def prepare_cues(
     return srt.retime(cues, timeline)
 
 
+def print_corrections(
+    found: list[fixes.Correction], cues: list[srt.Cue], reporter: Reporter
+) -> None:
+    """List suggested transcript fixes with where they occur in the recording."""
+    reporter.info(
+        f"The LLM suggests {len(found)} transcript correction{'' if len(found) == 1 else 's'} "
+        "(times in the recording):"
+    )
+    for number, fix in enumerate(found, 1):
+        times = [clock(t) for t in fixes.occurrences(cues, fix.wrong)]
+        where = ", ".join(times[:5]) + (f" +{len(times) - 5} more" if len(times) > 5 else "")
+        why = f"  ({fix.why})" if fix.why else ""
+        reporter.info(f'  {number:2}. "{fix.wrong}" -> "{fix.right}"  at {where}{why}')
+
+
+def confirm(question: str, reporter: Reporter) -> bool:
+    """Ask a yes/no question on the terminal (Enter means yes); False when there is no terminal."""
+    if not sys.stdin.isatty():
+        return False
+    print(f"{question} [Y/n] ", end="", file=reporter.stream, flush=True)
+    answer = sys.stdin.readline()
+    return bool(answer) and answer.strip().lower() in ("", "y", "yes")
+
+
 def _main_key(
     options: Options, info: MediaInfo, timeline: Timeline, audio_source: str, ass: str | None
 ) -> str:
@@ -309,8 +335,12 @@ def encoding_for(options: Options) -> encoders.Encoding:
     return encoders.Encoding(crf=crf, preset=options.preset, encoder=options.encoder)
 
 
-def run(options: Options, reporter: Reporter) -> None:
-    """Run the whole pipeline for one recording."""
+def run(options: Options, reporter: Reporter) -> bool:
+    """Run the whole pipeline for one recording.
+
+    Returns False when the run stopped before encoding so the user can review
+    the transcript corrections the LLM suggested, True when the video was made.
+    """
     started = time.monotonic()
     ffmpeg.require_tools()
     video = options.video.expanduser().resolve()
@@ -347,11 +377,16 @@ def run(options: Options, reporter: Reporter) -> None:
     if not options.no_cuts:
         print_summary(timeline, reporter)
 
-    cues = (
-        prepare_cues(options, transcript, timeline, removed_fillers, reporter)
-        if transcript.cues
-        else []
-    )
+    # Fixes change only the text, never times, so they come after the cuts are
+    # planned and the cuts stay where they are whatever is corrected.
+    fixed, _ = fixes.apply(transcript, vocabulary=options.vocabulary)
+
+    def fixed_cues(source: transcripts.Transcript) -> list[srt.Cue]:
+        if not source.cues:
+            return []
+        return prepare_cues(options, source, timeline, removed_fillers, reporter)
+
+    cues = fixed_cues(fixed)
     if transcript.cues and not cues and (want_captions or want_plan):
         raise PareError(
             "No subtitles are left after cutting: the subtitle times do not line up with "
@@ -361,7 +396,7 @@ def run(options: Options, reporter: Reporter) -> None:
     if options.dry_run:
         print_cut_list(timeline)
         reporter.info("Dry run: nothing was written.")
-        return
+        return True
 
     # Look at the card images now: a wrong path should not cost a full encode.
     splash_image = options.splash_image.expanduser() if options.splash_image else None
@@ -374,8 +409,6 @@ def run(options: Options, reporter: Reporter) -> None:
 
     out.final.parent.mkdir(parents=True, exist_ok=True)
     out.work.mkdir(parents=True, exist_ok=True)
-    if cues:
-        _write_text(out.cut_srt, srt.format_srt(cues))
 
     # The plan only needs the re-timed subtitles, so get it before the long
     # encode: an LLM problem then costs seconds, not minutes.
@@ -400,11 +433,47 @@ def run(options: Options, reporter: Reporter) -> None:
                 timeout=options.llm_timeout,
                 cwd=out.work,
                 reporter=reporter,
+                corrections=options.corrections != "off",
+                vocabulary=options.vocabulary,
             )
         plan_json = planning.to_json(plan, timeline.duration)
         same_file = options.plan is not None and options.plan.resolve() == out.plan
         if not same_file:
             _write_text(out.plan, plan_json)
+
+        if plan.corrections and not options.plan:
+            print_corrections(plan.corrections, fixed.cues, reporter)
+            accepted = options.corrections == "accept" or confirm(
+                "Apply them all and carry on?", reporter
+            )
+            if not accepted:
+                if not options.keep_work:
+                    shutil.rmtree(out.work, ignore_errors=True)
+                reporter.warn(
+                    f"stopped before encoding to review {len(plan.corrections)} suggested "
+                    f"transcript correction(s) in {out.plan}. Delete the ones you do not want "
+                    '(or change their "to"), then run the same command again with --plan '
+                    f"{out.plan}. Use --corrections accept to apply them without stopping, or "
+                    "--corrections off not to ask for them."
+                )
+                return False
+        if plan.corrections:
+            fixed, counts = fixes.apply(
+                transcript, vocabulary=options.vocabulary, corrections=plan.corrections
+            )
+            for fix, count in zip(plan.corrections, counts, strict=True):
+                if not count:
+                    reporter.warn(f'plan: correction "{fix.wrong}" does not occur in the subtitles')
+            applied = sum(1 for count in counts if count)
+            reporter.info(
+                f"  Applied {applied} transcript correction{'' if applied == 1 else 's'} "
+                f"({sum(counts)} change{'' if sum(counts) == 1 else 's'})"
+            )
+            cues = fixed_cues(fixed)
+        plan = planning.corrected(plan, options.vocabulary)
+
+    if cues:
+        _write_text(out.cut_srt, srt.format_srt(cues))
 
     ass: str | None = None
     if want_captions:
@@ -547,3 +616,4 @@ def run(options: Options, reporter: Reporter) -> None:
         reporter.info(f"  {out.cut_srt}  (subtitles matching the edited video)")
     if options.keep_work:
         reporter.info(f"  {out.work}  (intermediates, kept)")
+    return True

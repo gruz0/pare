@@ -34,6 +34,9 @@ splash_text = "Let's get started"    # card between the last clip and the video
 # outro_image = "~/Pictures/banner.png"    # an image after the video
 # outro_duration = 5.0
 # llm_cmd = "claude -p --model sonnet"   # any command: prompt on stdin, answer on stdout
+# Names that are always spelled this way: fixed without asking, and told to the LLM.
+# vocabulary = ["Kivo42", "Claude Code"]
+# corrections = "accept"   # apply the LLM's transcript fixes without stopping to review them
 # no_teaser = true
 
 # --- output ------------------------------------------------------------------
