@@ -259,7 +259,8 @@ def build_parser() -> argparse.ArgumentParser:
     )  # fmt: skip
     g.add_argument(
         "--caption-margin", type=int, metavar="PX",
-        help="distance from the frame edge in pixels (default: 4%% of the frame height)",
+        help="distance from the frame edge in pixels (default: 11%% of the frame height, 8%% "
+        "for top captions, which clears YouTube's player controls)",
     )  # fmt: skip
     g.add_argument(
         "--caption-max-chars", type=int, metavar="N",

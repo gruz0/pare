@@ -14,6 +14,13 @@ from pare.srt import Cue
 
 POSITIONS = ("bottom-center", "bottom-left", "top")
 
+# Default distance from the frame edge, as a share of the frame height. YouTube's
+# progress and control bars cover the bottom ~9 % of the player in the default
+# view, and it lifts its own captions to ~11 % while they show; the fullscreen
+# title bar covers the top ~6 %. See docs/decisions.md.
+BOTTOM_MARGIN = 0.11
+TOP_MARGIN = 0.08
+
 
 @dataclass(frozen=True)
 class CaptionStyle:
@@ -49,7 +56,8 @@ def build_ass(cues: list[Cue], width: int, height: int, style: CaptionStyle) -> 
     """Return a complete ASS script for ``cues`` on a ``width`` x ``height`` frame."""
     size = style.size or round(height * 0.042)
     outline = style.outline or round(size * 0.075, 1)
-    margin_v = style.margin or round(height * 0.04)
+    share = TOP_MARGIN if style.position == "top" else BOTTOM_MARGIN
+    margin_v = style.margin or round(height * share)
     # A webcam overlay in OBS usually fills the bottom-right ~300 px of a
     # 1920 px frame; keep a sixth of the width clear on that side.
     corner = round(width / 6)

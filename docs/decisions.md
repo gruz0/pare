@@ -66,6 +66,17 @@ Note on the target: −14 LUFS is the widely reported YouTube playback level and
 
 **Rendering: Pare writes ASS and uses the `subtitles` filter**, instead of passing the SRT with `force_style`. With an SRT, libass assumes a 384×288 script, so sizes and margins are not in pixels. Pare's ASS states the real resolution, so the font size (4.2 % of the frame height), outline and margins are exact, and left/right margins of one sixth of the width keep bottom-centre captions out of the corner where a webcam overlay sits. Other positions: `bottom-left`, `top`.
 
+**Margins: clear of YouTube's player controls.** Burned-in captions cannot move out of the way when YouTube shows its progress and control bars (on hover, on pause, in the first seconds of playback, on every tap on a phone), so they sit above them. Measured on screenshots of a published 1080p video in Chrome on a 1920×1080 screen:
+
+| View                     | Player height | Controls cover (from the bottom) | YouTube's own captions lift to | Top overlay            |
+| ------------------------ | ------------- | -------------------------------- | ------------------------------ | ---------------------- |
+| Watch page, default size | 751 px        | 67 px (8.9 %)                    | 85 px (11.3 %)                 | none                   |
+| Fullscreen               | 1080 px       | 67 px (6.2 %)                    | 91 px (8.4 %)                  | title to 60 px (5.6 %) |
+
+The controls are a fixed height in screen pixels, so their share grows as the player shrinks: the default-size watch page is the case that matters most on desktop. The bottom margin is therefore 11 % of the frame height (119 px at 1080p, 79 px at 720p, 238 px at 4K), level with where YouTube lifts its own captions in that view; the lowest caption pixel then lands 120 px above the bottom edge of a 1080p frame. `top` captions get 8 % (86 px at 1080p), below the fullscreen title and the densest part of its gradient. Both are shares of the height, so every resolution matches. `--caption-margin` still sets the distance in pixels. Not measured: the mobile apps and small embedded players, where the controls take a larger share again.
+
+At this height a two-line cue at the default size spans about 880 to 960 px on a 1080p frame, which is alongside a bottom-right webcam overlay, not below it. The left and right margins of one sixth of the width keep the text out of its way: on a real recording the widest two-line cue (48 characters) ended at x = 1503, about 50 px short of a 330 px overlay.
+
 **Path escaping: avoided rather than attempted.** The `subtitles=` argument breaks on `:`, `'`, `,`, `[` and spaces, and escaping needs several nested levels. Pare runs FFmpeg with the work directory as the current directory and refers to `captions.ass`, `topics.txt`, the font and the filter-graph scripts by fixed, plain file names. User paths only ever appear as whole command-line arguments, which need no escaping. Tested with a path containing spaces, colons, quotes, brackets, commas, semicolons, `=` and `%`.
 
 Cue text is made literal for ASS: `{`, `}` and `\` would start override tags, so they are replaced with look-alike characters.
