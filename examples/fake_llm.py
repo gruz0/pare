@@ -3,11 +3,14 @@
 
 Reads Pare's prompt on stdin, finds the ``[start-end] text`` subtitle lines in
 it, and prints a plan built from them by fixed rules: no network, no model, the
-same answer every time. Use it through ``examples/fake_llm.sh``:
+same answer every time. When asked for transcript corrections it suggests one
+for every near miss of a name the prompt lists as always spelled one way
+(``keyvo42`` for ``Kivo42``). Use it through ``examples/fake_llm.sh``:
 
     pare recording.mkv subs.srt --llm-cmd examples/fake_llm.sh
 """
 
+import difflib
 import json
 import re
 import sys
@@ -24,6 +27,21 @@ def title(text: str, limit: int) -> str:
         words.append(word)
     out = " ".join(words).strip(" .,!?") or text[:limit]
     return out[:1].upper() + out[1:]
+
+
+def near_misses(texts: list[str], names: list[str]) -> list[dict[str, str]]:
+    """Word runs that look like a known name but are spelled differently."""
+    found: dict[str, str] = {}
+    for text in texts:
+        words = text.split()
+        for name in names:
+            size = len(name.split())
+            for i in range(len(words) - size + 1):
+                heard = " ".join(words[i : i + size]).strip(".,!?;:")
+                close = difflib.SequenceMatcher(None, heard.lower(), name.lower()).ratio()
+                if heard.lower() != name.lower() and close >= 0.7:
+                    found.setdefault(heard, name)
+    return [{"from": k, "to": v, "why": "a known name"} for k, v in found.items()]
 
 
 def main() -> None:
@@ -73,6 +91,10 @@ def main() -> None:
 
     thirds = [cues[len(cues) * k // 3][2] for k in range(3)]
     plan = {"topics": [title(t, 35) for t in thirds], "clips": clips, "chapters": chapters}
+    if '"corrections"' in prompt:
+        known = re.search(r"These names are always spelled like this: (.+?)\. Watch", prompt)
+        names = [n.strip() for n in known[1].split(",")] if known else []
+        plan["corrections"] = near_misses([text for _, _, text in cues], names)
     print(json.dumps(plan, indent=2, ensure_ascii=False))
 
 

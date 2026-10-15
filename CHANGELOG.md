@@ -21,6 +21,12 @@ All notable changes to Pare are recorded here. The format follows
   with a hint when it cannot be used, and the default quality follows the encoder (`--crf` 18 for
   x264, 22 for GPU encoders, which looks about the same). On an RTX 3060 Ti a 1080p60 recording
   took about a third less time.
+- The plan suggests transcript corrections (misheard names, products, jargon) and Pare stops
+  before encoding so they can be reviewed in the plan file; `--plan` applies the ones kept, to the
+  captions, `cut.srt`, chapters and clip labels, with word timings fixed alongside. On a terminal
+  Pare offers to accept them and carry on; `--corrections accept|off` skips the review.
+- `vocabulary` in the config (or `--vocabulary`) lists names that are always right; they are fixed
+  without review and told to the LLM.
 
 ### Changed
 

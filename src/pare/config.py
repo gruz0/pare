@@ -69,6 +69,11 @@ class Options:
     llm_cmd: str = DEFAULT_LLM_CMD
     clips: int | None = None
     llm_timeout: float = 300.0
+    # review: stop before encoding so the user can check the LLM's transcript fixes;
+    # accept: apply them and carry on; off: do not ask for any.
+    corrections: str = "review"
+    # Names that are always spelled this way; applied to the transcript without review.
+    vocabulary: tuple[str, ...] = ()
 
     # teaser
     no_teaser: bool = False
@@ -105,6 +110,7 @@ class Options:
     quiet: bool = False
 
 
+CORRECTION_MODES = ("review", "accept", "off")
 DEFAULTS = Options(video=Path())
 DEFAULT_CLIPS = 3
 
@@ -122,6 +128,11 @@ examples:
 
   pare recording.mkv subs.srt --plan recording.plan.json --keep-work
       Re-render with a plan you edited. Nothing is sent to an LLM.
+
+  pare recording.mkv subs.srt --vocabulary "Kivo42,Claude Code"
+      Names Whisper keeps getting wrong: fixed in captions and chapters
+      without asking. The LLM also suggests fixes; Pare stops so you can
+      review them in recording.plan.json, then re-run with --plan.
 
   pare recording.mkv subs.srt --no-ai --no-captions
       Only cut pauses and fix loudness.
@@ -278,6 +289,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--llm-timeout", type=float, metavar="SEC",
         help=f"give up on the LLM after this long (default: {d.llm_timeout:g})",
     )  # fmt: skip
+    g.add_argument(
+        "--corrections", choices=CORRECTION_MODES,
+        help="transcript fixes the LLM suggests (misheard names, jargon): review stops "
+        "before encoding so you can check them in the plan (on a terminal it offers to "
+        "apply them and carry on), accept applies them, off does not ask "
+        f"(default: {d.corrections})",
+    )  # fmt: skip
+    g.add_argument(
+        "--vocabulary", type=split_list, metavar="LIST",
+        help="comma-separated names that are always spelled this way, e.g. "
+        '"Kivo42,Claude Code"; fixed in the transcript without review, and told to the LLM',
+    )  # fmt: skip
 
     g = parser.add_argument_group("teaser (title card + highlight clips) and outro")
     flag(g, "--no-teaser", "no title card or clips (chapters are still written)")
@@ -376,6 +399,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def split_list(text: str) -> tuple[str, ...]:
+    """A comma-separated list as a tuple of its non-empty items."""
+    return tuple(item.strip() for item in text.split(",") if item.strip())
+
+
 def default_config_paths() -> list[Path]:
     """Config files looked for when ``--config`` is not given, in order."""
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
@@ -385,9 +413,19 @@ def default_config_paths() -> list[Path]:
 def _coerce(key: str, value: object, annotation: object, source: Path) -> object:
     """Check a config value against the option's type and convert it."""
     args = typing.get_args(annotation)
+    if typing.get_origin(annotation) is tuple:
+        args = ()
     kinds = [a for a in args if a is not types.NoneType] if args else [annotation]
     kind = kinds[0]
     ok: bool
+    if typing.get_origin(kind) is tuple:
+        # A TOML list of strings, or one comma-separated string.
+        if isinstance(value, str):
+            return split_list(value)
+        ok = isinstance(value, list) and all(isinstance(item, str) for item in value)
+        if not ok:
+            raise PareError(f"{source}: '{key}' should be a list of strings, got {value!r}.")
+        return tuple(item.strip() for item in value if item.strip())
     if kind is bool:
         ok = isinstance(value, bool)
     elif kind is int:
@@ -469,6 +507,8 @@ def _validate(o: Options) -> None:
         (o.caption_size >= 0 and o.caption_margin >= 0 and o.caption_outline >= 0,
          "caption sizes cannot be negative"),
         (o.llm_timeout > 0, "--llm-timeout must be positive"),
+        (o.corrections in CORRECTION_MODES,
+         f"corrections must be one of {', '.join(CORRECTION_MODES)}"),
         (not (o.plan and o.no_ai), "--plan and --no-ai cannot be combined"),
         (o.audio_bitrate[:1].isdigit() and o.audio_bitrate.rstrip("kK").isdigit(),
          "--audio-bitrate should look like 192k"),

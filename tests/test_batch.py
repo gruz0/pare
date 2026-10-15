@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -178,3 +179,22 @@ def test_failures_are_reported_and_do_not_stop_the_others(recording, tmp_path, c
     assert (out / "c-good.final.mp4").is_file()
     assert not (out / "a-broken.final.mp4").exists()
     assert not (out / "b-untranscribed.final.mp4").exists()
+
+
+@needs_ffmpeg
+def test_a_recording_with_corrections_to_review_is_not_a_failure(recording, tmp_path, capsys):
+    video, subs = recording
+    videos, out = tmp_path / "videos", tmp_path / "out"
+    videos.mkdir()
+    os.link(video, videos / "talk.mkv")
+    (videos / "talk.srt").write_text(subs.read_text().replace("the pauses", "the Parre"))
+    args = [videos, "--llm-cmd", FAKE_LLM, "--vocabulary", "Pare", "-o", out, *FAST]
+    assert run_pare(*args) == 0
+    summary = capsys.readouterr().out
+    assert "0 done, 1 review, 0 skipped, 0 failed" in summary
+    assert "review   talk.mkv\n           transcript corrections to review in" in summary
+    assert not (out / "talk.final.mp4").exists()
+    assert json.loads((out / "talk.plan.json").read_text())["corrections"][0]["to"] == "Pare"
+    assert run_pare(*args, "--corrections", "accept") == 0
+    assert "1 done" in capsys.readouterr().out
+    assert "Pare" in (out / "talk.cut.srt").read_text()
