@@ -43,9 +43,39 @@ Whisper's cue times are approximate: cues often start a little early, end late, 
 - **Covering something**: `--caption-position top` or `bottom-left`; `--caption-margin 80` sets the distance from the edge in pixels. The default (11 % of the frame height, 119 px at 1080p; 8 % for `top`) keeps them clear of YouTube's progress and control bars, which would otherwise hide them on hover, on pause and on phones. Lower it for a platform without overlaid controls.
 - **Too big or too small**: `--caption-size 56` (pixels; the default is 4.2 % of the frame height, 45 px at 1080p).
 - **Lines too long or too short**: `--caption-max-chars 36`; `--caption-max-lines 1` for single-line captions.
-- **Another font**: `--caption-font "Noto Sans"` (any family fontconfig knows; `fc-list | grep -i noto`).
+- **Another font**: `--caption-font "Noto Sans"` (any family fontconfig knows; `fc-list | grep -i noto`). Pare warns when the family is not installed, since libass would otherwise quietly use another font.
+- **A bolder, short-form look**: `--caption-style` (below).
 - **A separate caption track instead**: `--no-captions`, then upload `<name>.cut.srt`.
 - **Names spelled wrong**: list them as `vocabulary = ["Kivo42", "Claude Code"]` in `pare.toml` (or `--vocabulary "Kivo42,Claude Code"`); case and separator slips are then fixed on every video without asking. Other mishearings come back from the LLM as suggestions in `<name>.plan.json`: keep the right ones and re-run with `--plan`. Tired of reviewing: `--corrections accept`; not wanted: `--corrections off`.
+
+### Caption styles
+
+`--caption-style` picks the look. Every style is drawn by libass from the ASS script, so it costs no extra encoding time.
+
+| Style               | Looks like                                                              |                                      |
+| ------------------- | ----------------------------------------------------------------------- | ------------------------------------ |
+| `classic` (default) | White text, thin outline, the whole cue at once                         | ![classic](demo/caption-classic.png) |
+| `bold`              | Bigger (5.5 % of the height) with an outline about three times as thick | ![bold](demo/caption-bold.png)       |
+| `box`               | Text on a translucent box, readable over busy screens                   | ![box](demo/caption-box.png)         |
+| `karaoke`           | The whole cue, with the word being spoken in the highlight colour       | ![karaoke](demo/caption-karaoke.png) |
+| `pop`               | One to three words at a time (7 % of the height), each group scaling in | ![pop](demo/caption-pop.png)         |
+
+- **`karaoke` and `pop` follow the words as they are spoken**, so they need word timing: a Parley folder (`--transcript`) or a WhisperX `.json` (`--words`). With only an `.srt` they are drawn as `bold`, and Pare says so. The word times go through the same cuts as the audio, so a highlight never runs ahead of the voice, and filler words cut with `--remove-fillers` are gone from the captions as well.
+- **Colours**: `--caption-color` (the text, `white`), `--caption-highlight` (the spoken word in `karaoke`, `#FFD400`) and `--caption-box` (the box in `box`, `black@0.6`). A hex value (`#FFD400`), a hex value with opacity (`#000000B3`) or a basic colour name, with `@0.6` for the opacity.
+- **Line length**: `--caption-max-chars` is for the `classic` size; the bigger styles get proportionally shorter lines (32 characters for `bold` at the default), so they are no wider than classic captions and stay clear of a webcam overlay. `cut.srt` is split the same way.
+- **Capitals**: `--caption-uppercase`, which suits `bold` and `pop`.
+- **The middle of the frame**: `--caption-position middle`, where short-form captions usually sit.
+- **A heavy display font**: the styles look best with one. DejaVu Sans Bold is the default because it is installed everywhere. To use another, install it and pass its family name:
+
+  ```bash
+  sudo apt install fonts-league-spartan   # Debian/Ubuntu; or copy a .ttf to ~/.local/share/fonts
+  fc-cache -f && fc-list : family | grep -i spartan
+  pare recording.mkv --transcript transcripts/recording/ --caption-style pop --caption-font "League Spartan"
+  ```
+
+  Montserrat ExtraBold, Anton and Bebas Neue (all from [Google Fonts](https://fonts.google.com/), free) are popular choices; after copying the `.ttf` into `~/.local/share/fonts`, pass `--caption-font "Montserrat ExtraBold"`, `"Anton"` or `"Bebas Neue"`. A font that has no bold face, such as Anton, is used as it is rather than artificially thickened.
+
+`<name>.cut.srt` is plain text in every style, since it is meant for upload as a separate caption track.
 
 ## Teaser and chapters
 

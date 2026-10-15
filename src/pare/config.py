@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pare import __version__
-from pare.captions import POSITIONS
+from pare.captions import POSITIONS, STYLES, ass_color
 from pare.encoders import DEFAULT_CRF, ENCODERS, PRESETS
 from pare.errors import PareError
 from pare.plan import DEFAULT_LLM_CMD
@@ -55,6 +55,7 @@ class Options:
     # captions
     no_captions: bool = False
     keep_speakers: bool = False
+    caption_style: str = "classic"
     caption_position: str = "bottom-center"
     caption_font: str = "DejaVu Sans"
     caption_size: int = 0
@@ -62,6 +63,10 @@ class Options:
     caption_margin: int = 0
     caption_max_chars: int = 42
     caption_max_lines: int = 2
+    caption_color: str = "white"
+    caption_highlight: str = "#FFD400"
+    caption_box: str = "black@0.6"
+    caption_uppercase: bool = False
 
     # AI plan
     no_ai: bool = False
@@ -245,13 +250,21 @@ def build_parser() -> argparse.ArgumentParser:
     flag(g, "--no-captions", "do not burn captions into the video")
     flag(g, "--keep-speakers", "keep speaker labels such as '[Alex]:' in captions")
     g.add_argument(
+        "--caption-style", choices=STYLES,
+        help="classic: white text, thin outline; bold: bigger, thick outline; box: text on "
+        "a translucent box; karaoke: the spoken word changes colour; pop: one to three "
+        "words at a time, scaling in. karaoke and pop need word timings (a Parley folder "
+        f"or --words), else they fall back to bold (default: {d.caption_style})",
+    )  # fmt: skip
+    g.add_argument(
         "--caption-position", choices=POSITIONS,
         help=f"where captions sit (default: {d.caption_position}, clear of a "
         "bottom-right webcam)",
     )  # fmt: skip
     g.add_argument(
-        "--caption-font", metavar="NAME", help=f"font family (default: {d.caption_font})"
-    )
+        "--caption-font", metavar="NAME",
+        help=f"installed font family, e.g. \"Montserrat ExtraBold\" (default: {d.caption_font})",
+    )  # fmt: skip
     g.add_argument(
         "--caption-size", type=int, metavar="PX",
         help="font size in pixels (default: 4.2%% of the frame height, 45 at 1080p)",
@@ -273,6 +286,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--caption-max-lines", type=int, metavar="N",
         help=f"most lines shown at once (default: {d.caption_max_lines})",
     )  # fmt: skip
+    g.add_argument(
+        "--caption-color", metavar="COLOR", help=f"text colour (default: {d.caption_color})"
+    )
+    g.add_argument(
+        "--caption-highlight", metavar="COLOR",
+        help=f"colour of the spoken word in karaoke (default: {d.caption_highlight})",
+    )  # fmt: skip
+    g.add_argument(
+        "--caption-box", metavar="COLOR",
+        help=f"box behind the text in the box style; @ sets the opacity (default: {d.caption_box})",
+    )  # fmt: skip
+    flag(g, "--caption-uppercase", "set captions in capitals")
 
     g = parser.add_argument_group("AI plan (topics, highlight clips, chapters, YouTube metadata)")
     flag(g, "--no-ai", "skip the plan: no title card, clips, chapters or metadata; nothing is sent")
@@ -488,6 +513,7 @@ def load_config(path: Path | None) -> dict[str, object]:
 def _validate(o: Options) -> None:
     checks = [
         (o.cut_by in ("audio", "subs", "both"), "cut_by must be audio, subs or both"),
+        (o.caption_style in STYLES, f"caption_style must be one of {', '.join(STYLES)}"),
         (
             o.caption_position in POSITIONS,
             f"caption_position must be one of {', '.join(POSITIONS)}",
@@ -531,6 +557,9 @@ def _validate(o: Options) -> None:
     for ok, message in checks:
         if not ok:
             raise PareError(f"Invalid option: {message}.")
+    ass_color(o.caption_color, "--caption-color")
+    ass_color(o.caption_highlight, "--caption-highlight")
+    ass_color(o.caption_box, "--caption-box")
     if o.fps is not None:
         try:
             parse_fps(o.fps)

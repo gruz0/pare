@@ -155,7 +155,8 @@ Each recording finds its transcript by name: a Parley folder `transcripts/<name>
 | `--audio-track N` / `--mix-tracks` | Which OBS audio track to use, or mix them all                  | track 1                           |
 | `--lufs LUFS` / `--no-loudnorm`    | Loudness target, or leave the level alone                      | −14                               |
 | `--no-captions`                    | Do not burn captions in                                        | off                               |
-| `--caption-position`               | `bottom-center`, `bottom-left` or `top`                        | `bottom-center`                   |
+| `--caption-position`               | `bottom-center`, `bottom-left`, `top` or `middle`              | `bottom-center`                   |
+| `--caption-style`                  | `classic`, `bold`, `box`, `karaoke` or `pop`                   | `classic`                         |
 | `--no-ai`                          | No LLM: no title card, clips or chapters                       | off                               |
 | `--plan FILE`                      | Use this plan instead of asking the LLM                        | -                                 |
 | `--vocabulary LIST`                | Names always spelled this way, e.g. `"Kivo42,Claude Code"`     | -                                 |

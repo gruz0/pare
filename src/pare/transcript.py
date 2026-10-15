@@ -14,6 +14,7 @@ from pathlib import Path
 
 from pare.errors import PareError
 from pare.srt import Cue, flatten, read_srt
+from pare.timeline import Timeline
 
 
 @dataclass(frozen=True)
@@ -181,3 +182,16 @@ def word_starts_by_cue(cues: list[Cue], words: list[Word]) -> dict[int, list[flo
         if len(inside) == len(tokens):
             result[index] = [w.start for w in inside]
     return result
+
+
+def retime_words(words: list[Word], timeline: Timeline) -> list[Word]:
+    """Move words onto the edited timeline, exactly as :func:`pare.srt.retime` moves cues.
+
+    Words inside removed sections are dropped; a word partly cut keeps what remains.
+    """
+    out: list[Word] = []
+    for word in words:
+        span = timeline.span(word.start, word.end)
+        if span and span[1] > span[0]:
+            out.append(Word(span[0], span[1], word.text))
+    return out

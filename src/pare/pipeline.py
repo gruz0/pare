@@ -18,6 +18,7 @@ from pare import (
     chapters,
     encoders,
     ffmpeg,
+    fonts,
     loudness,
     metadata,
     render,
@@ -27,7 +28,7 @@ from pare import (
 from pare import corrections as fixes
 from pare import plan as planning
 from pare import transcript as transcripts
-from pare.config import DEFAULT_CLIPS, Options
+from pare.config import DEFAULT_CLIPS, DEFAULTS, Options
 from pare.errors import PareError
 from pare.fonts import find_font
 from pare.intervals import Interval
@@ -191,8 +192,13 @@ def prepare_cues(
     timeline: Timeline,
     removed_fillers: set[str],
     reporter: Reporter,
+    height: int,
 ) -> list[srt.Cue]:
-    """Clean, split and re-time the subtitles onto the edited timeline."""
+    """Clean, split and re-time the subtitles onto the edited timeline.
+
+    Lines are shortened for the bigger caption styles (``height`` is the frame
+    height), so ``cut.srt`` reads the same as the burned-in captions.
+    """
     cues = transcript.cues
     if not options.keep_speakers:
         cues = srt.strip_speakers(cues)
@@ -211,11 +217,67 @@ def prepare_cues(
         word_starts = transcripts.word_starts_by_cue(cues, transcript.words)
     cues = srt.split_long_cues(
         cues,
-        max_chars=options.caption_max_chars,
+        max_chars=captions.line_chars(
+            options.caption_style, options.caption_max_chars, options.caption_size, height
+        ),
         max_lines=options.caption_max_lines,
         word_starts=word_starts,
     )
     return srt.retime(cues, timeline)
+
+
+def caption_style(
+    options: Options,
+    transcript: transcripts.Transcript,
+    timeline: Timeline,
+    removed_fillers: set[str],
+    reporter: Reporter,
+) -> tuple[captions.CaptionStyle, list[transcripts.Word] | None]:
+    """The caption look from the options, and the spoken words on the edited timeline.
+
+    Words are only needed by the styles that follow speech. They go through
+    the same timeline as the cues, and cut fillers leave the list with their
+    sound, so a highlight never runs ahead of or behind the audio.
+    """
+    name = options.caption_style
+    words: list[transcripts.Word] | None = None
+    if name in captions.WORD_STYLES:
+        if transcript.words:
+            kept = transcript.words
+            if removed_fillers:
+                kept, _ = silence.split_fillers(kept, removed_fillers)
+            words = transcripts.retime_words(kept, timeline)
+        else:
+            reporter.warn(
+                f"the {name} caption style follows each spoken word and needs word timings, "
+                f"which this transcript has none of; using {captions.FALLBACK_STYLE} "
+                "instead. Pass a Parley folder with --transcript, or a WhisperX .json with "
+                "--words."
+            )
+            name = captions.FALLBACK_STYLE
+    family = fonts.check_family(options.caption_font)
+    if not family.found:
+        reporter.warn(
+            f"caption font '{options.caption_font}' is not installed, so captions will use "
+            f"{family.substitute or 'a fallback font'}. Check the name with "
+            f"'fc-list : family', or install the font and run 'fc-cache -f'."
+        )
+    style = captions.CaptionStyle(
+        name=name,
+        font=options.caption_font,
+        bold=family.has_bold,
+        size=options.caption_size,
+        outline=options.caption_outline,
+        margin=options.caption_margin,
+        position=options.caption_position,
+        color=options.caption_color,
+        highlight=options.caption_highlight,
+        box=options.caption_box,
+        uppercase=options.caption_uppercase,
+    )
+    if name != "classic" or options.caption_font != DEFAULTS.caption_font:
+        reporter.info(f"  Captions: {name}, {options.caption_font}")
+    return style, words
 
 
 def print_corrections(
@@ -397,7 +459,9 @@ def run(options: Options, reporter: Reporter) -> bool:
     def fixed_cues(source: transcripts.Transcript) -> list[srt.Cue]:
         if not source.cues:
             return []
-        return prepare_cues(options, source, timeline, removed_fillers, reporter)
+        return prepare_cues(
+            options, source, timeline, removed_fillers, reporter, render.even(info.height)
+        )
 
     cues = fixed_cues(fixed)
     if transcript.cues and not cues and (want_captions or want_plan):
@@ -490,14 +554,9 @@ def run(options: Options, reporter: Reporter) -> bool:
 
     ass: str | None = None
     if want_captions:
-        style = captions.CaptionStyle(
-            font=options.caption_font,
-            size=options.caption_size,
-            outline=options.caption_outline,
-            margin=options.caption_margin,
-            position=options.caption_position,
-        )
-        ass = captions.build_ass(cues, render.even(info.width), render.even(info.height), style)
+        style, words = caption_style(options, fixed, timeline, removed_fillers, reporter)
+        size = (render.even(info.width), render.even(info.height))
+        ass = captions.build_ass(cues, *size, style, words)
     main = render_main(options, info, timeline, audio_source, ass, out.work, encoding, reporter)
 
     fps = timeline.fps
