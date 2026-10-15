@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from pare import metadata
 from pare import plan as planning
 from pare.errors import PareError
 from pare.plan import PlanError, validate
@@ -23,6 +24,11 @@ GOOD = {
         {"start": 40, "title": "Cutting the pauses"},
         {"start": 80, "title": "Captions and chapters"},
     ],
+    "titles": ["Cut the pauses out of a screen recording", "Captions that stay in sync"],
+    "description": "How to cut pauses.\n\nAnd burn in captions.",
+    "tags": ["screen recording", "ffmpeg"],
+    "pinned_comment": "What do you cut first?",
+    "filenames": ["cut-pauses-from-screen-recordings"],
 }
 
 
@@ -328,3 +334,66 @@ def test_clip_labels_are_kept_shortened_and_optional():
     assert plan.clips[2].label == ""
     saved = json.loads(planning.to_json(plan, DURATION))
     assert saved["clips"][0]["label"] == "The fix that worked"
+
+
+def test_metadata_is_validated_and_saved():
+    plan, problems = check(GOOD)
+    assert problems == []
+    data = plan.metadata
+    assert data.titles == GOOD["titles"]
+    assert data.description == "How to cut pauses.\n\nAnd burn in captions."
+    assert data.tags == ["screen recording", "ffmpeg"]
+    assert data.pinned_comment == "What do you cut first?"
+    assert data.filenames == ["cut-pauses-from-screen-recordings"]
+    saved = json.loads(planning.to_json(plan, DURATION))
+    for key in planning.METADATA_KEYS:
+        assert saved[key] == GOOD[key]
+
+
+def test_metadata_is_repaired_to_youtube_limits():
+    raw = dict(
+        GOOD,
+        titles=["  A <great> title\n", "x " * 80, "Three", "Four", "Three"],
+        description="Line one   \r\n\r\n\r\n\r\nLine <two>",
+        tags=["#ffmpeg", "FFmpeg, obs", "obs studio", *(f"tag number {i}" for i in range(60))],
+        filenames=["Day 12: Fixing OBS Audio.mp4", "Привет", "Café-au-lait " * 10],
+    )
+    plan, problems = check(raw)
+    data = plan.metadata
+    assert data.titles[0] == "A great title"
+    assert len(data.titles[1]) <= metadata.TITLE_LIMIT and data.titles[1].endswith("…")
+    assert len(data.titles) == metadata.TITLE_OPTIONS
+    assert data.description == "Line one\n\nLine two"
+    assert data.tags[:3] == ["ffmpeg", "obs", "obs studio"]
+    assert metadata.tags_length(data.tags) <= metadata.TAGS_LIMIT
+    assert data.filenames[0] == "day-12-fixing-obs-audio"
+    assert data.filenames[1].startswith("cafe-au-lait-cafe")
+    assert len(data.filenames[1]) <= metadata.FILENAME_CHARS
+    assert not data.filenames[1].endswith("-")
+    text = "\n".join(problems)
+    assert "longer than YouTube's 100 characters" in text
+    assert "there are 4 titles" in text
+    assert "YouTube allows 500" in text
+    assert 'file name "Привет" has no ASCII letters' in text
+
+
+def test_plan_without_metadata_loads_and_has_none(tmp_path):
+    bare = {key: value for key, value in GOOD.items() if key not in planning.METADATA_KEYS}
+    plan, problems = check(bare, strict=False, n_clips=None)
+    assert problems == []
+    assert not plan.metadata.present()
+    assert not set(planning.METADATA_KEYS) & set(json.loads(planning.to_json(plan, DURATION)))
+    # A fresh LLM answer is asked for it, so leaving it out is fed back.
+    _, problems = check(bare)
+    assert '"titles" is missing' in problems and '"filenames" is missing' in problems
+    _, problems = check(dict(GOOD, titles=[], tags="ffmpeg, obs"))
+    assert '"titles" has no usable entries' in problems
+    assert '"tags" must be a list of strings' in problems
+
+
+def test_prompt_asks_for_metadata():
+    prompt = planning.build_prompt(CUES, DURATION, 3)
+    for key in planning.METADATA_KEYS:
+        assert f'"{key}"' in prompt
+    assert f"each at most {metadata.TITLE_TARGET} characters" in prompt
+    assert 'start with it ("day-12-...")' in prompt

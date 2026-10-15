@@ -11,14 +11,17 @@ $ pare recording.mkv subs.srt
 recording.mkv: 1920x1080, 60 fps, 6:08
 Finding pauses...
   6:08 -> 5:16: 52.1 s removed (14%) in 101 cuts
-Asking the LLM for topics, highlights and chapters...
+Asking the LLM for topics, highlights, chapters and YouTube metadata...
   Loudness: -39.0 -> -14 LUFS
 Encoding main video  done in 2:30
 Done in 3:09.
   recording.final.mp4      upload this
   recording.chapters.txt   paste into the description
+  recording.youtube.md     title options, description, tags, pinned comment
   recording.plan.json      edit and re-run to change the teaser or chapters
   recording.cut.srt        subtitles matching the edited video
+Suggested file names:
+  day-12-cutting-pauses-from-screen-recordings.mkv
 ```
 
 ![The same audio before and after: pauses removed, level raised](docs/demo/waveform.png)
@@ -44,6 +47,7 @@ All of that is mechanical work. Pare does it with FFmpeg and an LLM that reads t
 3. **Re-times and burns in your captions.** Long lines are split into readable chunks, placed clear of a bottom-right webcam.
 4. **Plans a teaser and chapters.** The LLM reads the re-timed subtitles and picks topics, a few punchy clips and chapter titles. Pare checks and repairs the answer in code, then saves it as a plain JSON file you can edit.
 5. **Assembles the result.** An "In this video" card, the highlight clips (each marked "Coming up"), a short splash that shows where the video starts, then the full video, plus a YouTube-ready chapter list.
+6. **Drafts the upload form.** Three title options, a description with the chapters in it, tags, a question to pin as the first comment, and search-friendly names for the video file, all in `recording.youtube.md`.
 
 Every step can be switched off or tuned. See [how it works](docs/how-it-works.md) for the details.
 
@@ -90,7 +94,7 @@ examples/make_sample.sh
 pare sample.mkv examples/sample.srt --llm-cmd examples/fake_llm.sh
 ```
 
-You get `sample.final.mp4`, `sample.chapters.txt`, `sample.plan.json` and `sample.cut.srt` in the current folder. Open the video: the pauses are gone, captions are on, and it starts with a title card and three clips.
+You get `sample.final.mp4`, `sample.chapters.txt`, `sample.youtube.md`, `sample.plan.json` and `sample.cut.srt` in the current folder. Open the video: the pauses are gone, captions are on, and it starts with a title card and three clips.
 
 ## Use it on your own recording
 
@@ -156,6 +160,7 @@ Each recording finds its transcript by name: a Parley folder `transcripts/<name>
 | `--plan FILE`                      | Use this plan instead of asking the LLM                        | -                                 |
 | `--vocabulary LIST`                | Names always spelled this way, e.g. `"Kivo42,Claude Code"`     | -                                 |
 | `--corrections MODE`               | LLM transcript fixes: `review` first, `accept`, or `off`       | `review`                          |
+| `--description-footer TEXT`        | Added after the chapters in the YouTube description            | -                                 |
 | `--clips N`                        | Number of highlight clips                                      | 3                                 |
 | `--no-teaser`                      | No card or clips (chapters still written)                      | off                               |
 | `--title-text TEXT`                | Card heading, e.g. in another language                         | "In this video"                   |
@@ -191,6 +196,8 @@ Change a topic, swap a clip, reword a clip's `label` (shown on its badge), renam
 pare recording.mkv subs.srt --plan recording.plan.json --keep-work
 ```
 
+The plan also holds the YouTube metadata (`titles`, `description`, `tags`, `pinned_comment`, `filenames`); edit those the same way and `recording.youtube.md` is written again from them.
+
 With `--plan` nothing is sent to an LLM and the same inputs give the same output. With `--keep-work` the slow main encode from the previous run is reused, so only the teaser is rebuilt: on a 9-minute recording that is about 30 seconds instead of 5 minutes. (Use `--keep-work` on the first run too, so there is something to reuse.) `recording.cut.srt` shows what is said when, which helps when picking times.
 
 ## Fix misheard names before they are burned in
@@ -219,6 +226,25 @@ vocabulary = ["Kivo42", "Claude Code", "Acme.Cloud"]
 ```
 
 They are fixed with no review step wherever only the case or a separator is off (`kivo42`, `claude code`, `acme cloud`), and the LLM is told them, so it catches real mishearings such as `keyvo42`.
+
+## YouTube title, description and tags
+
+`recording.youtube.md` has everything the upload form asks for, drafted from what you actually said:
+
+- **Three title options**, each up to 70 characters, with no claims that are not in the video.
+- **The description**: two or three short paragraphs, then the chapter list (the same as `recording.chapters.txt`, teaser included), then your footer.
+- **Tags**, trimmed to YouTube's 500 characters.
+- **A pinned comment**: a question that invites replies.
+- **File names**: three search-friendly names, such as `day-12-cutting-pauses-from-screen-recordings`, for when the recording is still called `2026-01-15 10-00-00.mkv`. They are also printed at the end of the run.
+
+Put the part of the description that never changes in the config file:
+
+```toml
+description_footer = """
+Subscribe for a new video every day.
+Website: https://example.com
+"""
+```
 
 ## Privacy
 

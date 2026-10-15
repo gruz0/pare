@@ -37,6 +37,10 @@ splash_text = "Let's get started"    # card between the last clip and the video
 # Names that are always spelled this way: fixed without asking, and told to the LLM.
 # vocabulary = ["Kivo42", "Claude Code"]
 # corrections = "accept"   # apply the LLM's transcript fixes without stopping to review them
+# Added after the chapters in the YouTube description in <name>.youtube.md.
+# description_footer = """
+# Website: https://example.com
+# """
 # no_teaser = true
 
 # --- output ------------------------------------------------------------------

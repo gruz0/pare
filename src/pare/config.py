@@ -74,6 +74,8 @@ class Options:
     corrections: str = "review"
     # Names that are always spelled this way; applied to the transcript without review.
     vocabulary: tuple[str, ...] = ()
+    # Text added to the end of the YouTube description: links, socials.
+    description_footer: str = ""
 
     # teaser
     no_teaser: bool = False
@@ -118,6 +120,7 @@ _EPILOG = """\
 examples:
   pare recording.mkv subs.srt
       Polish a recording: writes recording.final.mp4, recording.chapters.txt,
+      recording.youtube.md (titles, description, tags, file names),
       recording.plan.json and recording.cut.srt next to it.
 
   pare recording.mkv --transcript transcripts/recording/
@@ -271,8 +274,8 @@ def build_parser() -> argparse.ArgumentParser:
         help=f"most lines shown at once (default: {d.caption_max_lines})",
     )  # fmt: skip
 
-    g = parser.add_argument_group("AI plan (topics, highlight clips, chapters)")
-    flag(g, "--no-ai", "skip the plan: no title card, clips or chapters; nothing is sent")
+    g = parser.add_argument_group("AI plan (topics, highlight clips, chapters, YouTube metadata)")
+    flag(g, "--no-ai", "skip the plan: no title card, clips, chapters or metadata; nothing is sent")
     g.add_argument(
         "--plan", type=Path, metavar="FILE",
         help="use this plan.json instead of asking the LLM (edit one and re-render)",
@@ -301,6 +304,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--vocabulary", type=split_list, metavar="LIST",
         help="comma-separated names that are always spelled this way, e.g. "
         '"Kivo42,Claude Code"; fixed in the transcript without review, and told to the LLM',
+    )  # fmt: skip
+    g.add_argument(
+        "--description-footer", metavar="TEXT",
+        help="text added after the chapters in the YouTube description in "
+        "recording.youtube.md: links, socials (best set in the config file)",
     )  # fmt: skip
 
     g = parser.add_argument_group("teaser (title card + highlight clips) and outro")

@@ -120,6 +120,11 @@ GOOD = {
         {"start": 40, "title": "Cutting the pauses"},
         {"start": 80, "title": "Captions"},
     ],
+    "titles": ["Why keyvo42 cuts pauses"],
+    "description": "All about keyvo42.",
+    "tags": ["keyvo42", "Kivo42", "ffmpeg"],
+    "pinned_comment": "Have you tried keyvo42?",
+    "filenames": ["keyvo42-cuts-pauses", "kivo42-cuts-pauses"],
 }
 
 
@@ -176,6 +181,11 @@ def test_corrections_round_trip_and_fix_the_plan_text(tmp_path):
     assert shown.topics[2] == "Kivo42 Captions"  # the vocabulary applies too
     assert shown.clips[0].label == "The Kivo42 fix"
     assert [c.title for c in shown.chapters] == ["Why Kivo42", "Cutting the pauses", "Captions"]
+    assert shown.metadata.titles == ["Why Kivo42 cuts pauses"]
+    assert shown.metadata.description == "All about Kivo42."
+    assert shown.metadata.tags == ["Kivo42", "ffmpeg"]  # the fixed tag is now a duplicate
+    assert shown.metadata.pinned_comment == "Have you tried Kivo42?"
+    assert shown.metadata.filenames == ["kivo42-cuts-pauses"]
     assert planning.corrected(dict_plan := check(GOOD)[0]) == dict_plan
 
 
